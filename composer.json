@@ -1,0 +1,26 @@
+{
+    "name": "skeeks/cms-export-shop-yandex-market",
+    "description": "Export data from the site on SkeekS CMS",
+    "keywords": ["module", "cms", "skeeks", "sx", "app", "yii2", "export"],
+    "homepage": "http://www.skeeks.com/",
+    "type": "yii2-extension",
+    "license": "GPL-3.0+",
+    "support": {
+        "issues": "http://cms.skeeks.com",
+        "source": "https://github.com/skeeks-cms/cms-export-shop-yandex-market"
+    },
+    "authors": [
+        {
+            "name": "Semenov Alexander",
+            "email": "semenov@skeeks.com"
+        }
+    ],
+    "require": {
+        "skeeks/cms-export": "*"
+    },
+    "autoload": {
+        "psr-4": {
+            "skeeks\\cms\\exportShopYandexMarket\\": ""
+        }
+    }
+}
