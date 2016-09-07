@@ -22,11 +22,13 @@ use skeeks\cms\relatedProperties\PropertyType;
 use skeeks\cms\relatedProperties\propertyTypes\PropertyTypeElement;
 use skeeks\cms\relatedProperties\propertyTypes\PropertyTypeList;
 use skeeks\cms\shop\models\ShopCmsContentElement;
+use skeeks\cms\shop\models\ShopProduct;
 use skeeks\cms\widgets\formInputs\selectTree\SelectTree;
 use skeeks\modules\cms\money\models\Currency;
 use yii\base\Exception;
 use yii\db\ActiveQuery;
 use yii\helpers\ArrayHelper;
+use yii\helpers\Console;
 use yii\helpers\FileHelper;
 use yii\helpers\Json;
 use yii\helpers\Url;
@@ -146,14 +148,6 @@ class ExportShopYandexMarketHandler extends ExportHandler
             }
         }
 
-
-        $elements = ShopCmsContentElement::find()->where([
-            'content_id' => $this->content_id
-        ])->all();
-
-        $countTotal = count($elements);
-        $this->result->stdout("\tЭлементов найдено: {$countTotal}\n");
-
         $imp = new \DOMImplementation();
 		$dtd = $imp->createDocumentType('yml_catalog', '', "shops.dtd");
 		$xml               = $imp->createDocument('', '', $dtd);
@@ -162,6 +156,8 @@ class ExportShopYandexMarketHandler extends ExportHandler
 
         $yml_catalog = $xml->appendChild(new \DOMElement('yml_catalog'));
 		$yml_catalog->appendChild(new \DOMAttr('date', date('Y-m-d H:i:s')));
+
+            $this->result->stdout("\tДобавление основной информации\n");
 
         $shop = $yml_catalog->appendChild(new \DOMElement('shop'));
 
@@ -173,6 +169,7 @@ class ExportShopYandexMarketHandler extends ExportHandler
 
         $this->_appendCurrencies($shop);
         $this->_appendCategories($shop);
+        $this->_appendOffers($shop);
 
         $xml->save($this->rootFilePath);
 
@@ -186,6 +183,7 @@ class ExportShopYandexMarketHandler extends ExportHandler
      */
     protected function _appendCurrencies(\DOMElement $shop)
     {
+        $this->result->stdout("\tДобавление валют\n");
         /**
          * @var Currency $currency
          */
@@ -213,6 +211,8 @@ class ExportShopYandexMarketHandler extends ExportHandler
          */
         $rootTree = CmsTree::findOne($this->tree_id);
 
+        $this->result->stdout("\tВставка категорий\n");
+
         if ($rootTree)
         {
             $xcategories = $shop->appendChild(new \DOMElement('categories'));
@@ -232,5 +232,97 @@ class ExportShopYandexMarketHandler extends ExportHandler
             }
         }
 
+    }
+
+    /**
+     * @param \DOMElement $shop
+     *
+     * @return $this
+     */
+    protected function _appendOffers(\DOMElement $shop)
+    {
+        $elements = ShopCmsContentElement::find()->where([
+            'content_id' => $this->content_id
+        ])->all();
+
+        $countTotal = count($elements);
+        $this->result->stdout("\tТоваров найдено: {$countTotal}\n");
+
+
+        if ($elements)
+        {
+            $xoffers = $shop->appendChild(new \DOMElement('offers'));
+            /**
+             * @var ShopCmsContentElement $element
+             */
+            foreach ($elements as $element)
+            {
+                try
+                {
+                    if ($element->shopProduct->product_type == ShopProduct::TYPE_SIMPLE)
+                    {
+                        $xoffer = $xoffers->appendChild(new \DOMElement('offer'));
+                        $this->_initOffer($xoffer, $element);
+                    } else
+                    {
+                        $offers = $element->tradeOffers;
+                        foreach ($offers as $offer)
+                        {
+                            $xoffer = $xoffers->appendChild(new \DOMElement('offer'));
+                            $this->_initOffer($xoffer, $offer);
+                        }
+                    }
+                } catch (\Exception $e)
+                {
+                    $this->result->stdout("\t{$element->id} — {$e->getMessage()}\n", Console::FG_RED);
+                    continue;
+                }
+            }
+        }
+    }
+
+    protected function _initOffer(\DOMNode $xoffer, ShopCmsContentElement $element)
+    {
+        $xoffer->appendChild(new \DOMAttr('id', $element->id));
+
+        if (!$element->shopProduct)
+        {
+            throw new Exception("Нет данных для магазина");
+        }
+
+        if ($element->shopProduct->quantity)
+        {
+            $xoffer->appendChild(new \DOMAttr('available', 'true'));
+        } else
+        {
+            $xoffer->appendChild(new \DOMAttr('available', 'false'));
+        }
+
+        $xoffer->appendChild(new \DOMElement('url', $element->absoluteUrl));
+        $xoffer->appendChild(new \DOMElement('name', $element->name));
+
+        if ($element->image)
+        {
+            $xoffer->appendChild(new \DOMElement('picture', $element->image->absoluteSrc));
+        }
+
+        if ($element->shopProduct->baseProductPrice)
+        {
+            $xoffer->appendChild(new \DOMElement('picture', $element->image->absoluteSrc));
+        }
+
+        if ($element->tree_id)
+        {
+            $xoffer->appendChild(new \DOMElement('categoryId', $element->tree_id));
+        }
+
+        if ($element->shopProduct->baseProductPrice)
+        {
+            $money = $element->shopProduct->baseProductPrice->money;
+            $xoffer->appendChild(new \DOMElement('price', $money->getValue()));
+            $xoffer->appendChild(new \DOMElement('currencyId', $money->getCurrency()->getCurrencyCode()));
+        }
+
+        return $this;
     }
 }
