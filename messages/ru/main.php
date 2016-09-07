@@ -1,4 +1,4 @@
 <?php
 return [
-    '[Xml] Exports of goods in yandex market' => '[Xml] Экспорт товаров в yandex market',
+    '[Xml] Simple exports of goods in yandex market' => '[Xml] Упрощенный экспорт товаров в yandex market',
 ];

@@ -26,6 +26,7 @@ use skeeks\cms\shop\models\ShopProduct;
 use skeeks\cms\widgets\formInputs\selectTree\SelectTree;
 use skeeks\modules\cms\money\models\Currency;
 use yii\base\Exception;
+use yii\console\Application;
 use yii\db\ActiveQuery;
 use yii\helpers\ArrayHelper;
 use yii\helpers\Console;
@@ -45,18 +46,27 @@ class ExportShopYandexMarketHandler extends ExportHandler
 {
     public $content_id = null;
     public $tree_id = null;
+    public $base_url = null;
 
     public $file_path = '';
 
 
     public function init()
     {
-        $this->name = \Yii::t('skeeks/exportShopYandexMarket', '[Xml] Exports of goods in yandex market');
+        $this->name = \Yii::t('skeeks/exportShopYandexMarket', '[Xml] Simple exports of goods in yandex market');
 
         if (!$this->file_path)
         {
             $rand = \Yii::$app->formatter->asDate(time(), "Y-M-d") . "-" . \Yii::$app->security->generateRandomString(5);
             $this->file_path = "/export/yandex-market/content-{$rand}.xml";
+        }
+
+        if (!$this->base_url)
+        {
+            if (!\Yii::$app instanceof Application)
+            {
+                $this->base_url = Url::base(true);
+            }
         }
 
         parent::init();
@@ -93,6 +103,9 @@ class ExportShopYandexMarketHandler extends ExportHandler
 
             ['tree_id' , 'required'],
             ['tree_id' , 'integer'],
+
+            ['base_url' , 'required'],
+            ['base_url' , 'url'],
         ]);
     }
 
@@ -101,6 +114,7 @@ class ExportShopYandexMarketHandler extends ExportHandler
         return ArrayHelper::merge(parent::attributeLabels(), [
             'content_id'        => \Yii::t('skeeks/exportShopYandexMarket', 'Контент'),
             'tree_id'        => \Yii::t('skeeks/exportShopYandexMarket', 'Родительская категория'),
+            'base_url'        => \Yii::t('skeeks/exportShopYandexMarket', 'Базовый url'),
         ]);
     }
 
@@ -118,6 +132,8 @@ class ExportShopYandexMarketHandler extends ExportHandler
             ]
         );
 
+        echo $form->field($this, 'base_url');
+
         echo $form->field($this, 'content_id')->listBox(
             array_merge(['' => ' - '], CmsContent::getDataForSelect(true, function(ActiveQuery $activeQuery)
             {
@@ -134,6 +150,11 @@ class ExportShopYandexMarketHandler extends ExportHandler
 
     public function export()
     {
+
+        //TODO: if console app
+        \Yii::$app->urlManager->baseUrl = $this->base_url;
+        \Yii::$app->urlManager->scriptUrl = $this->base_url;
+
         ini_set("memory_limit","8192M");
         set_time_limit(0);
 
@@ -163,7 +184,9 @@ class ExportShopYandexMarketHandler extends ExportHandler
 
         $shop->appendChild(new \DOMElement('name', htmlspecialchars(\Yii::$app->name)));
 		$shop->appendChild(new \DOMElement('company', htmlspecialchars(\Yii::$app->name)));
-		$shop->appendChild(new \DOMElement('url', htmlspecialchars(Url::home(true))));
+		$shop->appendChild(new \DOMElement('url', htmlspecialchars(
+            $this->base_url
+        )));
 		$shop->appendChild(new \DOMElement('platform', "SkeekS CMS"));
 
 
@@ -259,6 +282,12 @@ class ExportShopYandexMarketHandler extends ExportHandler
             {
                 try
                 {
+                    if (!$element->shopProduct)
+                    {
+                        throw new Exception("Нет данных для магазина");
+                        continue;
+                    }
+
                     if ($element->shopProduct->product_type == ShopProduct::TYPE_SIMPLE)
                     {
                         $xoffer = $xoffers->appendChild(new \DOMElement('offer'));
@@ -298,17 +327,12 @@ class ExportShopYandexMarketHandler extends ExportHandler
             $xoffer->appendChild(new \DOMAttr('available', 'false'));
         }
 
-        $xoffer->appendChild(new \DOMElement('url', $element->absoluteUrl));
-        $xoffer->appendChild(new \DOMElement('name', $element->name));
+        $xoffer->appendChild(new \DOMElement('url', htmlspecialchars($element->url)));
+        $xoffer->appendChild(new \DOMElement('name', htmlspecialchars($element->name)));
 
         if ($element->image)
         {
-            $xoffer->appendChild(new \DOMElement('picture', $element->image->absoluteSrc));
-        }
-
-        if ($element->shopProduct->baseProductPrice)
-        {
-            $xoffer->appendChild(new \DOMElement('picture', $element->image->absoluteSrc));
+            $xoffer->appendChild(new \DOMElement('picture', htmlspecialchars($this->base_url . $element->image->src)));
         }
 
         if ($element->tree_id)
