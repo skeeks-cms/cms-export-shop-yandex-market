@@ -194,6 +194,7 @@ class ExportShopYandexMarketHandler extends ExportHandler
         $this->_appendCategories($shop);
         $this->_appendOffers($shop);
 
+        $xml->formatOutput = true;
         $xml->save($this->rootFilePath);
 
         return $this->result;
@@ -282,11 +283,12 @@ class ExportShopYandexMarketHandler extends ExportHandler
             {
                 try
                 {
-                    if (!$element->shopProduct)
+                    if (!$element->shopProduct || !$element->shopProduct->baseProductPrice || !$element->shopProduct->baseProductPrice->money->getValue())
                     {
-                        throw new Exception("Нет данных для магазина");
+                        throw new Exception("Нет данных для магазина или нулевая цена");
                         continue;
                     }
+
 
                     if ($element->shopProduct->product_type == ShopProduct::TYPE_SIMPLE)
                     {
