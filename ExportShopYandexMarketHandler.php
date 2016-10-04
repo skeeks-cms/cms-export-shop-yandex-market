@@ -44,11 +44,36 @@ use yii\widgets\ActiveForm;
  */
 class ExportShopYandexMarketHandler extends ExportHandler
 {
+    /**
+     * @var null выгружаемый контент
+     */
     public $content_id = null;
+
+    /**
+     * @var null раздел и его подразделы попадут в выгрузку
+     */
     public $tree_id = null;
+
+    /**
+     * @var null базовый путь сайта
+     */
     public $base_url = null;
 
+    /**
+     * @var string путь к результирующему файлу
+     */
     public $file_path = '';
+
+
+    /**
+     * @var string
+     */
+    public $vendor = '';
+
+    /**
+     * @var string
+     */
+    public $vendorCode = '';
 
 
     public function init()
@@ -106,6 +131,9 @@ class ExportShopYandexMarketHandler extends ExportHandler
 
             ['base_url' , 'required'],
             ['base_url' , 'url'],
+
+            ['vendor' , 'string'],
+            ['vendorCode' , 'string'],
         ]);
     }
 
@@ -115,6 +143,8 @@ class ExportShopYandexMarketHandler extends ExportHandler
             'content_id'        => \Yii::t('skeeks/exportShopYandexMarket', 'Контент'),
             'tree_id'        => \Yii::t('skeeks/exportShopYandexMarket', 'Родительская категория'),
             'base_url'        => \Yii::t('skeeks/exportShopYandexMarket', 'Базовый url'),
+            'vendor'        => \Yii::t('skeeks/exportShopYandexMarket', 'Производитель или бренд'),
+            'vendorCode'        => \Yii::t('skeeks/exportShopYandexMarket', 'Код производителя (артикул)'),
         ]);
     }
 
@@ -144,8 +174,50 @@ class ExportShopYandexMarketHandler extends ExportHandler
             'size' => 1,
             'data-form-reload' => 'true'
         ]);
+
+        if ($this->content_id)
+        {
+            echo $form->field($this, 'vendor')->listBox(
+                ArrayHelper::merge(['' => ' - '], $this->getAvailableFields()), [
+                'size' => 1,
+            ]);
+
+            echo $form->field($this, 'vendorCode')->listBox(
+                ArrayHelper::merge(['' => ' - '], $this->getAvailableFields()), [
+                'size' => 1,
+            ]);
+        }
+
     }
 
+
+    public function getAvailableFields()
+    {
+        if (!$this->cmsContent)
+        {
+            return [];
+        }
+
+        $element = new CmsContentElement([
+            'content_id' => $this->cmsContent->id
+        ]);
+
+        $fields = [];
+
+        foreach ($element->attributeLabels() as $key => $name)
+        {
+            $fields['element.' . $key] = $name;
+        }
+
+        foreach ($element->relatedPropertiesModel->attributeLabels() as $key => $name)
+        {
+            $fields['property.' . $key] = $name . " [свойство]";
+        }
+
+        $fields['image'] = 'Ссылка на главное изображение';
+
+        return array_merge(['' => ' - '], $fields);
+    }
 
 
     public function export()
@@ -283,9 +355,23 @@ class ExportShopYandexMarketHandler extends ExportHandler
             {
                 try
                 {
-                    if (!$element->shopProduct || !$element->shopProduct->baseProductPrice || !$element->shopProduct->baseProductPrice->money->getValue())
+                    if (!$element->shopProduct)
                     {
-                        throw new Exception("Нет данных для магазина или нулевая цена");
+                        throw new Exception("Нет данных для магазина");
+                        continue;
+                    }
+
+                    if (!$element->shopProduct->baseProductPrice ||
+                        !$element->shopProduct->baseProductPrice->money->getValue()
+                    )
+                    {
+                        throw new Exception("Нет цены");
+                        continue;
+                    }
+
+                    if ($element->shopProduct->quantity <= 0)
+                    {
+                        throw new Exception("Нет в наличии");
                         continue;
                     }
 
@@ -326,7 +412,8 @@ class ExportShopYandexMarketHandler extends ExportHandler
             $xoffer->appendChild(new \DOMAttr('available', 'true'));
         } else
         {
-            $xoffer->appendChild(new \DOMAttr('available', 'false'));
+            throw new Exception("Нет в наличии");
+            //$xoffer->appendChild(new \DOMAttr('available', 'false'));
         }
 
         $xoffer->appendChild(new \DOMElement('url', htmlspecialchars($element->url)));
@@ -348,6 +435,8 @@ class ExportShopYandexMarketHandler extends ExportHandler
             $xoffer->appendChild(new \DOMElement('price', $money->getValue()));
             $xoffer->appendChild(new \DOMElement('currencyId', $money->getCurrency()->getCurrencyCode()));
         }
+
+
 
         return $this;
     }
