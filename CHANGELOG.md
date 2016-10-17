@@ -1,6 +1,10 @@
 CHANGELOG
 ==============
 
+1.0.0-beta
+-----------------
+ * active elements
+
 1.0.0-alpha3
 -----------------
  * quantity

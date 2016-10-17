@@ -337,21 +337,29 @@ class ExportShopYandexMarketHandler extends ExportHandler
      */
     protected function _appendOffers(\DOMElement $shop)
     {
-        $elements = ShopCmsContentElement::find()->where([
+        $totalCount = ShopCmsContentElement::find()->where([
             'content_id' => $this->content_id
-        ])->all();
+        ])->count();
 
-        $countTotal = count($elements);
-        $this->result->stdout("\tТоваров найдено: {$countTotal}\n");
+        $this->result->stdout("\tВсего товаров: {$totalCount}\n");
+
+        $activeTotalCount = ShopCmsContentElement::find()->active()->andWhere([
+            'content_id' => $this->content_id
+        ])->count();
+
+        $this->result->stdout("\tАктивных товаров найдено: {$activeTotalCount}\n");
 
 
-        if ($elements)
+        if ($activeTotalCount)
         {
+            $successAdded = 0;
             $xoffers = $shop->appendChild(new \DOMElement('offers'));
             /**
              * @var ShopCmsContentElement $element
              */
-            foreach ($elements as $element)
+            foreach (ShopCmsContentElement::find()->active()->andWhere([
+                'content_id' => $this->content_id
+            ])->each(10) as $element)
             {
                 try
                 {
@@ -389,12 +397,16 @@ class ExportShopYandexMarketHandler extends ExportHandler
                             $this->_initOffer($xoffer, $offer);
                         }
                     }
+
+                    $successAdded ++;
                 } catch (\Exception $e)
                 {
-                    $this->result->stdout("\t{$element->id} — {$e->getMessage()}\n", Console::FG_RED);
+                    $this->result->stdout("\t\t{$element->id} — {$e->getMessage()}\n", Console::FG_RED);
                     continue;
                 }
             }
+
+            $this->result->stdout("\tДобавлено в файл: {$successAdded}\n");
         }
     }
 
