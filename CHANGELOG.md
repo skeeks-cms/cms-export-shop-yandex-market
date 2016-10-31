@@ -1,6 +1,10 @@
 CHANGELOG
 ==============
 
+1.0.0-rc
+-----------------
+ * Expanding discharge option
+
 1.0.0-beta
 -----------------
  * active elements

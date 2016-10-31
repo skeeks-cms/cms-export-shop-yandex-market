@@ -18,6 +18,7 @@ use skeeks\cms\models\CmsContent;
 use skeeks\cms\models\CmsContentElement;
 use skeeks\cms\models\CmsContentPropertyEnum;
 use skeeks\cms\models\CmsTree;
+use skeeks\cms\modules\admin\widgets\BlockTitleWidget;
 use skeeks\cms\relatedProperties\PropertyType;
 use skeeks\cms\relatedProperties\propertyTypes\PropertyTypeElement;
 use skeeks\cms\relatedProperties\propertyTypes\PropertyTypeList;
@@ -26,6 +27,7 @@ use skeeks\cms\shop\models\ShopProduct;
 use skeeks\cms\widgets\formInputs\selectTree\SelectTree;
 use skeeks\modules\cms\money\models\Currency;
 use yii\base\Exception;
+use yii\bootstrap\Alert;
 use yii\console\Application;
 use yii\db\ActiveQuery;
 use yii\helpers\ArrayHelper;
@@ -68,12 +70,35 @@ class ExportShopYandexMarketHandler extends ExportHandler
     /**
      * @var string
      */
+    public $shop_name = '';
+
+    /**
+     * @var string
+     */
+    public $shop_company = '';
+
+
+    /**
+     * @var string
+     */
     public $vendor = '';
 
     /**
      * @var string
      */
-    public $vendorCode = '';
+    public $vendor_code = '';
+
+    /**
+     * @var string
+     */
+    public $default_delivery = '';
+    public $default_pickup = '';
+    public $default_store = '';
+    public $default_sales_notes = '';
+
+
+    public $filter_property = '';
+    public $filter_property_value = '';
 
 
     public function init()
@@ -133,7 +158,19 @@ class ExportShopYandexMarketHandler extends ExportHandler
             ['base_url' , 'url'],
 
             ['vendor' , 'string'],
-            ['vendorCode' , 'string'],
+            ['vendor_code' , 'string'],
+
+            ['shop_name' , 'string'],
+            ['shop_company' , 'string'],
+
+            ['default_sales_notes' , 'string'],
+
+            ['default_pickup' , 'string'],
+            ['default_store' , 'string'],
+            ['default_delivery' , 'string'],
+
+            ['filter_property' , 'string'],
+            ['filter_property_value' , 'string'],
         ]);
     }
 
@@ -141,10 +178,35 @@ class ExportShopYandexMarketHandler extends ExportHandler
     {
         return ArrayHelper::merge(parent::attributeLabels(), [
             'content_id'        => \Yii::t('skeeks/exportShopYandexMarket', 'Контент'),
-            'tree_id'        => \Yii::t('skeeks/exportShopYandexMarket', 'Родительская категория'),
+            'tree_id'        => \Yii::t('skeeks/exportShopYandexMarket', 'Выгружаемые категории'),
             'base_url'        => \Yii::t('skeeks/exportShopYandexMarket', 'Базовый url'),
             'vendor'        => \Yii::t('skeeks/exportShopYandexMarket', 'Производитель или бренд'),
-            'vendorCode'        => \Yii::t('skeeks/exportShopYandexMarket', 'Код производителя (артикул)'),
+            'vendor_code'        => \Yii::t('skeeks/exportShopYandexMarket', 'Артикул производителя'),
+            'shop_name'        => \Yii::t('skeeks/exportShopYandexMarket', 'Короткое название магазина'),
+            'shop_company'        => \Yii::t('skeeks/exportShopYandexMarket', 'Полное наименование компании, владеющей магазином'),
+
+            'default_sales_notes'        => \Yii::t('skeeks/exportShopYandexMarket', 'вариантах оплаты, описания акций и распродаж '),
+            'default_delivery'        => \Yii::t('skeeks/exportShopYandexMarket', 'Возможность курьерской доставки'),
+            'default_pickup'        => \Yii::t('skeeks/exportShopYandexMarket', 'Возможность самовывоза из пунктов выдачи'),
+            'default_store'        => \Yii::t('skeeks/exportShopYandexMarket', 'Возможность купить товар в розничном магазине'),
+
+            'filter_property'        => \Yii::t('skeeks/exportShopYandexMarket', 'Признак выгрузки'),
+            'filter_property_value'        => \Yii::t('skeeks/exportShopYandexMarket', 'Значение'),
+        ]);
+    }
+    public function attributeHints()
+    {
+        return ArrayHelper::merge(parent::attributeHints(), [
+            'shop_name'        => \Yii::t('skeeks/exportShopYandexMarket', 'Короткое название магазина, должно содержать не более 20 символов. В названии нельзя использовать слова, не имеющие отношения к наименованию магазина, например «лучший», «дешевый», указывать номер телефона и т. п.
+Название магазина должно совпадать с фактическим названием магазина, которое публикуется на сайте. При несоблюдении данного требования наименование может быть изменено Яндекс.Маркетом самостоятельно без уведомления магазина.'),
+            'shop_company'        => \Yii::t('skeeks/exportShopYandexMarket', 'Полное наименование компании, владеющей магазином. Не публикуется, используется для внутренней идентификации.'),
+            'default_delivery'        => \Yii::t('skeeks/exportShopYandexMarket', 'Для всех товаров магазина, по умолчанию'),
+            'default_pickup'        => \Yii::t('skeeks/exportShopYandexMarket', 'Для всех товаров магазина, по умолчанию'),
+            'default_store'        => \Yii::t('skeeks/exportShopYandexMarket', 'Для всех товаров магазина, по умолчанию'),
+            'default_sales_notes'        => \Yii::t('skeeks/exportShopYandexMarket', 'Элемент используется для отражения информации о:
+ минимальной сумме заказа, минимальной партии товара, необходимости предоплаты (указание элемента обязательно);
+ вариантах оплаты, описания акций и распродаж (указание элемента необязательно).
+Допустимая длина текста в элементе — 50 символов. .'),
         ]);
     }
 
@@ -155,14 +217,13 @@ class ExportShopYandexMarketHandler extends ExportHandler
     {
         parent::renderConfigForm($form);
 
-        echo $form->field($this, 'tree_id')->widget(
-            SelectTree::className(),
-            [
-                'mode' => SelectTree::MOD_SINGLE
-            ]
-        );
+        echo BlockTitleWidget::widget([
+            'content' => 'Общий настройки магазина'
+        ]);
 
         echo $form->field($this, 'base_url');
+        echo $form->field($this, 'shop_name');
+        echo $form->field($this, 'shop_company');
 
         echo $form->field($this, 'content_id')->listBox(
             array_merge(['' => ' - '], CmsContent::getDataForSelect(true, function(ActiveQuery $activeQuery)
@@ -175,17 +236,98 @@ class ExportShopYandexMarketHandler extends ExportHandler
             'data-form-reload' => 'true'
         ]);
 
+        echo $form->field($this, 'tree_id')->widget(
+            SelectTree::className(),
+            [
+                'mode' => SelectTree::MOD_SINGLE
+            ]
+        );
+
         if ($this->content_id)
         {
+            echo BlockTitleWidget::widget([
+                'content' => 'Настройки данных товаров'
+            ]);
+
+
+            echo $form->field($this, 'default_delivery')->listBox(
+                ArrayHelper::merge(['' => ' - '], \Yii::$app->cms->booleanFormat()), [
+                'size' => 1,
+            ]);
+
+            echo $form->field($this, 'default_pickup')->listBox(
+                ArrayHelper::merge(['' => ' - '], \Yii::$app->cms->booleanFormat()), [
+                'size' => 1,
+            ]);
+
+            echo $form->field($this, 'default_store')->listBox(
+                ArrayHelper::merge(['' => ' - '], \Yii::$app->cms->booleanFormat()), [
+                'size' => 1,
+            ]);
+
+            echo $form->field($this, 'default_sales_notes')->textInput([
+                'maxlength' => 50
+            ]);
+
+            echo "<hr />";
+
             echo $form->field($this, 'vendor')->listBox(
                 ArrayHelper::merge(['' => ' - '], $this->getAvailableFields()), [
                 'size' => 1,
             ]);
 
-            echo $form->field($this, 'vendorCode')->listBox(
+            echo $form->field($this, 'vendor_code')->listBox(
                 ArrayHelper::merge(['' => ' - '], $this->getAvailableFields()), [
                 'size' => 1,
             ]);
+
+
+
+            echo BlockTitleWidget::widget([
+                'content' => 'Фильтрация'
+            ]);
+
+            echo Alert::widget([
+                'options' => [
+                    'class' => 'alert-info',
+                ],
+                'body' => 'В выгрузку попадают только активные товары и предложения. Дополнительно можно ограничить выборку опциями ниже.'
+            ]);
+
+            echo $form->field($this, 'filter_property')->listBox(
+                ArrayHelper::merge(['' => ' - '], $this->getAvailableFields()), [
+                'size' => 1,
+                'data-form-reload' => 'true'
+            ]);
+
+            if ($this->filter_property)
+            {
+                if ($propertyName = $this->getRelatedPropertyName($this->filter_property))
+                {
+                    $element = new CmsContentElement([
+                        'content_id' => $this->cmsContent->id
+                    ]);
+
+                    if ($property = $element->relatedPropertiesModel->getRelatedProperty($propertyName))
+                    {
+                        if ($property->handler instanceof PropertyTypeList)
+                        {
+                            echo $form->field($this, 'filter_property_value')->listBox(
+                                ArrayHelper::merge(['' => ' - '], ArrayHelper::map($property->enums, 'id', 'value')), [
+                                'size' => 1,
+                            ]);
+                        } else
+                        {
+                            echo $form->field($this, 'filter_property_value');
+                        }
+                    } else
+                    {
+                        echo $form->field($this, 'filter_property_value');
+                    }
+                }
+
+            }
+
         }
 
     }
@@ -219,6 +361,25 @@ class ExportShopYandexMarketHandler extends ExportHandler
         return array_merge(['' => ' - '], $fields);
     }
 
+    public function getRelatedPropertyName($fieldName)
+    {
+        if (strpos("field_" . $fieldName, 'property.'))
+        {
+            $realName = str_replace("property.", "", $fieldName);
+            return $realName;
+        }
+    }
+
+    public function getElementName($fieldName)
+    {
+        if (strpos("field_" . $fieldName, 'element.'))
+        {
+            $realName = str_replace("element.", "", $fieldName);
+            return $realName;
+        }
+
+        return '';
+    }
 
     public function export()
     {
@@ -254,8 +415,9 @@ class ExportShopYandexMarketHandler extends ExportHandler
 
         $shop = $yml_catalog->appendChild(new \DOMElement('shop'));
 
-        $shop->appendChild(new \DOMElement('name', htmlspecialchars(\Yii::$app->name)));
-		$shop->appendChild(new \DOMElement('company', htmlspecialchars(\Yii::$app->name)));
+        $shop->appendChild(new \DOMElement('name', $this->shop_name ? htmlspecialchars($this->shop_name) : htmlspecialchars(\Yii::$app->name)));
+		$shop->appendChild(new \DOMElement('company', $this->shop_company ? htmlspecialchars($this->shop_company) : htmlspecialchars(\Yii::$app->name)));
+		$shop->appendChild(new \DOMElement('email', htmlspecialchars('info@skeeks.com')));
 		$shop->appendChild(new \DOMElement('url', htmlspecialchars(
             $this->base_url
         )));
@@ -386,15 +548,15 @@ class ExportShopYandexMarketHandler extends ExportHandler
 
                     if ($element->shopProduct->product_type == ShopProduct::TYPE_SIMPLE)
                     {
-                        $xoffer = $xoffers->appendChild(new \DOMElement('offer'));
-                        $this->_initOffer($xoffer, $element);
+                        $this->_initOffer($xoffers, $element);
                     } else
                     {
                         $offers = $element->tradeOffers;
                         foreach ($offers as $offer)
                         {
-                            $xoffer = $xoffers->appendChild(new \DOMElement('offer'));
-                            $this->_initOffer($xoffer, $offer);
+                            /*$xoffer = $xoffers->appendChild(new \DOMElement('offer'));
+                            $this->_initOffer($xoffer, $offer);*/
+                            $this->_initOffer($xoffers, $offer);
                         }
                     }
 
@@ -410,14 +572,33 @@ class ExportShopYandexMarketHandler extends ExportHandler
         }
     }
 
-    protected function _initOffer(\DOMNode $xoffer, ShopCmsContentElement $element)
+    protected function _initOffer($xoffers, ShopCmsContentElement $element)
     {
-        $xoffer->appendChild(new \DOMAttr('id', $element->id));
 
         if (!$element->shopProduct)
         {
             throw new Exception("Нет данных для магазина");
         }
+
+        if ($this->filter_property && $this->filter_property_value)
+        {
+            $propertyName = $this->getRelatedPropertyName($this->filter_property);
+
+            if (!$attributeValue = $element->relatedPropertiesModel->getAttribute($propertyName))
+            {
+                throw new Exception("Не найдено свойство для фильтрации");
+            }
+
+            if ($attributeValue != $this->filter_property_value)
+            {
+                throw new Exception("Не найдено свойство для фильтрации");
+            }
+        }
+
+
+        $xoffer = $xoffers->appendChild(new \DOMElement('offer'));
+        $xoffer->appendChild(new \DOMAttr('id', $element->id));
+
 
         if ($element->shopProduct->quantity)
         {
@@ -449,6 +630,73 @@ class ExportShopYandexMarketHandler extends ExportHandler
         }
 
 
+        if ($this->vendor)
+        {
+            if ($propertyName = $this->getRelatedPropertyName($this->vendor))
+            {
+                if ($element->relatedPropertiesModel)
+                {
+                    if ($value = $element->relatedPropertiesModel->getAttribute($propertyName))
+                    {
+                        $smartName = $element->relatedPropertiesModel->getSmartAttribute($propertyName);
+                        $xoffer->appendChild(new \DOMElement('vendor', $smartName));
+                    }
+                }
+            }
+        }
+
+        if ($this->vendor_code)
+        {
+            if ($propertyName = $this->getRelatedPropertyName($this->vendor_code))
+            {
+                if ($element->relatedPropertiesModel)
+                {
+                    if ($value = $element->relatedPropertiesModel->getAttribute($propertyName))
+                    {
+                        $smartName = $element->relatedPropertiesModel->getSmartAttribute($propertyName);
+                        $xoffer->appendChild(new \DOMElement('vendorCode', $smartName));
+                    }
+                }
+            }
+        }
+
+        if ($this->default_delivery)
+        {
+            if ($this->default_delivery == 'Y')
+            {
+                $xoffer->appendChild(new \DOMElement('delivery', 'true'));
+            } else if ($this->default_delivery == 'N')
+            {
+                $xoffer->appendChild(new \DOMElement('delivery', 'false'));
+            }
+        }
+
+        if ($this->default_store)
+        {
+            if ($this->default_store == 'Y')
+            {
+                $xoffer->appendChild(new \DOMElement('store', 'true'));
+            } else if ($this->default_store == 'N')
+            {
+                $xoffer->appendChild(new \DOMElement('store', 'false'));
+            }
+        }
+
+        if ($this->default_pickup)
+        {
+            if ($this->default_pickup == 'Y')
+            {
+                $xoffer->appendChild(new \DOMElement('pickup', 'true'));
+            } else if ($this->default_pickup == 'N')
+            {
+                $xoffer->appendChild(new \DOMElement('pickup', 'false'));
+            }
+        }
+
+        if ($this->default_sales_notes)
+        {
+            $xoffer->appendChild(new \DOMElement('sales_notes', $this->default_sales_notes));
+        }
 
         return $this;
     }
