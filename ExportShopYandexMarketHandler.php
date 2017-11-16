@@ -698,6 +698,6 @@ class ExportShopYandexMarketHandler extends ExportHandler
             $xoffer->appendChild(new \DOMElement('sales_notes', $this->default_sales_notes));
         }
 
-        return $this;
+        return $xoffer;
     }
 }
