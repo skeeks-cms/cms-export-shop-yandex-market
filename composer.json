@@ -4,9 +4,9 @@
     "keywords": ["module", "cms", "skeeks", "sx", "app", "yii2", "export"],
     "homepage": "http://www.skeeks.com/",
     "type": "yii2-extension",
-    "license": "GPL-3.0+",
+    "license": "BSD-3-Clause",
     "support": {
-        "issues": "http://cms.skeeks.com",
+        "issues": "https://cms.skeeks.com",
         "source": "https://github.com/skeeks-cms/cms-export-shop-yandex-market"
     },
     "authors": [
@@ -16,11 +16,11 @@
         }
     ],
     "require": {
-        "skeeks/cms-export": "*"
+        "skeeks/cms-export": "^1.0"
     },
     "autoload": {
         "psr-4": {
-            "skeeks\\cms\\exportShopYandexMarket\\": ""
+            "skeeks\\cms\\exportShopYandexMarket\\": "src/"
         }
     },
     "extra": {

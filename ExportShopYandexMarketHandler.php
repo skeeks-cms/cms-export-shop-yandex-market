@@ -19,6 +19,7 @@ use skeeks\cms\models\CmsContentElement;
 use skeeks\cms\models\CmsContentPropertyEnum;
 use skeeks\cms\models\CmsTree;
 use skeeks\cms\modules\admin\widgets\BlockTitleWidget;
+use skeeks\cms\money\models\MoneyCurrency;
 use skeeks\cms\relatedProperties\PropertyType;
 use skeeks\cms\relatedProperties\propertyTypes\PropertyTypeElement;
 use skeeks\cms\relatedProperties\propertyTypes\PropertyTypeList;
@@ -446,7 +447,7 @@ class ExportShopYandexMarketHandler extends ExportHandler
          * @var Currency $currency
          */
         $xcurrencies = $shop->appendChild(new \DOMElement('currencies'));
-		foreach (Currency::find()->active()->orderBy(['priority' => SORT_ASC])->all() as $currency)
+		foreach (MoneyCurrency::find()->andWhere(['is_active' => true])->orderBy(['priority' => SORT_ASC])->all() as $currency)
 		{
 			$xcurr = $xcurrencies->appendChild(new \DOMElement('currency'));
 			$xcurr->appendChild(new \DOMAttr('id', $currency->code));
