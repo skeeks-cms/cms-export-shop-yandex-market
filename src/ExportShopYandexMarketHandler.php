@@ -500,9 +500,10 @@ class ExportShopYandexMarketHandler extends ExportHandler
      */
     protected function _appendOffers(\DOMElement $shop)
     {
-        $totalCount = ShopCmsContentElement::find()->where([
+        $query =  ShopCmsContentElement::find()->where([
             'content_id' => $this->content_id
-        ])->count();
+        ]);
+        $totalCount = $query->count();
 
         $this->result->stdout("\tВсего товаров: {$totalCount}\n");
 
@@ -512,6 +513,17 @@ class ExportShopYandexMarketHandler extends ExportHandler
 
         $this->result->stdout("\tАктивных товаров найдено: {$activeTotalCount}\n");
 
+        /**
+         * Массив подразделов заданной категории
+         */
+
+        $rootTree = CmsTree::findOne($this->tree_id);
+        if ($rootTree)
+        {
+            $trees = $rootTree->getDescendants()->orderBy(['level' => SORT_ASC])->all();
+            $trees = ArrayHelper::merge([$rootTree], $trees);
+            $query->andWhere(['tree_id' => ArrayHelper::map($trees, 'id', 'id')]);
+        }
 
         if ($activeTotalCount)
         {
@@ -520,9 +532,7 @@ class ExportShopYandexMarketHandler extends ExportHandler
             /**
              * @var ShopCmsContentElement $element
              */
-            foreach (ShopCmsContentElement::find()->active()->andWhere([
-                'content_id' => $this->content_id
-            ])->each(10) as $element)
+            foreach ($query->each(10) as $element)
             {
                 try
                 {
