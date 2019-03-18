@@ -500,9 +500,10 @@ class ExportShopYandexMarketHandler extends ExportHandler
      */
     protected function _appendOffers(\DOMElement $shop)
     {
-        $totalCount = ShopCmsContentElement::find()->where([
+        $query =  ShopCmsContentElement::find()->where([
             'content_id' => $this->content_id
-        ])->count();
+        ]);
+        $totalCount = $query->count();
 
         $this->result->stdout("\tВсего товаров: {$totalCount}\n");
 
@@ -515,9 +516,15 @@ class ExportShopYandexMarketHandler extends ExportHandler
         /**
          * Массив подразделов заданной категории
          */
-        $query = new Query;
-        $query->select('id')->from('cms_tree')->where(['LIKE', 'pids' ,$this->tree_id]);
-        $categoriesIds = ArrayHelper::map($query->all(), 'id', 'id');
+
+        $rootTree = CmsTree::findOne($this->tree_id);
+        if ($rootTree)
+        {
+            $trees = $rootTree->getDescendants()->orderBy(['level' => SORT_ASC])->all();
+            $trees = ArrayHelper::merge([$rootTree], $trees);
+            $query->andWhere(['tree_id' => ArrayHelper::map($trees, 'id', 'id')]);
+        }
+
         if ($activeTotalCount)
         {
             $successAdded = 0;
@@ -525,9 +532,7 @@ class ExportShopYandexMarketHandler extends ExportHandler
             /**
              * @var ShopCmsContentElement $element
              */
-            foreach (ShopCmsContentElement::find()->active()->andWhere([
-                'content_id' => $this->content_id
-            ])->each(10) as $element)
+            foreach ($query->each(10) as $element)
             {
                 try
                 {
@@ -548,21 +553,6 @@ class ExportShopYandexMarketHandler extends ExportHandler
                     if ($element->shopProduct->quantity <= 0)
                     {
                         throw new Exception("Нет в наличии");
-                        continue;
-                    }
-
-                    if (!$element->tree_id)
-                    {
-                        throw new Exception("Не указан основной раздел");
-                        continue;
-                    }
-
-                    /**
-                     * Принадлежит ли товар к указанной категории
-                     */
-                    if (!ArrayHelper::isIn($element->tree_id, $categoriesIds))
-                    {
-                        throw new Exception("Товар не из этой категории");
                         continue;
                     }
 
