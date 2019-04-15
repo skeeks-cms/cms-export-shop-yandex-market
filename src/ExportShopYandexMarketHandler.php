@@ -550,6 +550,13 @@ class ExportShopYandexMarketHandler extends ExportHandler
                         continue;
                     }
 
+
+                    if ((float) $element->shopProduct->baseProductPrice->money->amount == 0)
+                    {
+                        throw new Exception("Цена = 0");
+                        continue;
+                    }
+
                     if ($element->shopProduct->quantity <= 0)
                     {
                         throw new Exception("Нет в наличии");
