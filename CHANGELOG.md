@@ -3,6 +3,7 @@ CHANGELOG
 
 1.1.6
 -----------------
+ * Change configs
  * Fixed 0.00 price
  
 1.1.5
