@@ -418,7 +418,7 @@ class ExportShopYandexMarketHandler extends ExportHandler
 		//$xml->formatOutput = true;
 
         $yml_catalog = $xml->appendChild(new \DOMElement('yml_catalog'));
-		$yml_catalog->appendChild(new \DOMAttr('date', date('Y-m-d H:i:s')));
+		$yml_catalog->appendChild(new \DOMAttr('date', \Yii::$app->formatter->asDate(time(), 'php:Y-m-d H:i:s')));
 
             $this->result->stdout("\tДобавление основной информации\n");
 
