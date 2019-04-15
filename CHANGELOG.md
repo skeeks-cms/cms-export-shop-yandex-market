@@ -3,6 +3,7 @@ CHANGELOG
 
 1.1.6
 -----------------
+ * Add shop email setting
  * Change configs
  * Fixed 0.00 price
  

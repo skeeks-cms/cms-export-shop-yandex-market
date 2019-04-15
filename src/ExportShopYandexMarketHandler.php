@@ -72,6 +72,10 @@ class ExportShopYandexMarketHandler extends ExportHandler
      * @var string
      */
     public $shop_name = '';
+    /**
+     * @var string
+     */
+    public $shop_email = '';
 
     /**
      * @var string
@@ -162,6 +166,8 @@ class ExportShopYandexMarketHandler extends ExportHandler
             ['vendor_code' , 'string'],
 
             ['shop_name' , 'string'],
+            ['shop_email' , 'string'],
+            ['shop_email' , 'email'],
             ['shop_company' , 'string'],
 
             ['default_sales_notes' , 'string'],
@@ -184,6 +190,7 @@ class ExportShopYandexMarketHandler extends ExportHandler
             'vendor'        => \Yii::t('skeeks/exportShopYandexMarket', 'Производитель или бренд'),
             'vendor_code'        => \Yii::t('skeeks/exportShopYandexMarket', 'Артикул производителя'),
             'shop_name'        => \Yii::t('skeeks/exportShopYandexMarket', 'Короткое название магазина'),
+            'shop_email'        => \Yii::t('skeeks/exportShopYandexMarket', 'Email магазина'),
             'shop_company'        => \Yii::t('skeeks/exportShopYandexMarket', 'Полное наименование компании, владеющей магазином'),
 
             'default_sales_notes'        => \Yii::t('skeeks/exportShopYandexMarket', 'вариантах оплаты, описания акций и распродаж '),
@@ -224,6 +231,7 @@ class ExportShopYandexMarketHandler extends ExportHandler
 
         echo $form->field($this, 'base_url');
         echo $form->field($this, 'shop_name');
+        echo $form->field($this, 'shop_email');
         echo $form->field($this, 'shop_company');
 
         echo $form->field($this, 'content_id')->listBox(
@@ -418,7 +426,7 @@ class ExportShopYandexMarketHandler extends ExportHandler
 
         $shop->appendChild(new \DOMElement('name', $this->shop_name ? htmlspecialchars($this->shop_name) : htmlspecialchars(\Yii::$app->name)));
 		$shop->appendChild(new \DOMElement('company', $this->shop_company ? htmlspecialchars($this->shop_company) : htmlspecialchars(\Yii::$app->name)));
-		$shop->appendChild(new \DOMElement('email', htmlspecialchars('info@skeeks.com')));
+		$shop->appendChild(new \DOMElement('email', $this->shop_email ? htmlspecialchars($this->shop_email) : htmlspecialchars(\Yii::$app->cms->adminEmail)));
 		$shop->appendChild(new \DOMElement('url', htmlspecialchars(
             $this->base_url
         )));
