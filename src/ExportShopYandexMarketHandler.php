@@ -6,7 +6,6 @@
  * @date 29.08.2016
  */
 namespace skeeks\cms\exportShopYandexMarket;
-
 use skeeks\cms\cmsWidgets\treeMenu\TreeMenuCmsWidget;
 use skeeks\cms\export\ExportHandler;
 use skeeks\cms\export\ExportHandlerFilePath;
@@ -37,7 +36,6 @@ use yii\helpers\FileHelper;
 use yii\helpers\Json;
 use yii\helpers\Url;
 use yii\widgets\ActiveForm;
-
 /**
  * @property CmsContent $cmsContent
  *
@@ -51,23 +49,18 @@ class ExportShopYandexMarketHandler extends ExportHandler
      * @var null выгружаемый контент
      */
     public $content_id = null;
-
     /**
      * @var null раздел и его подразделы попадут в выгрузку
      */
     public $tree_id = null;
-
     /**
      * @var null базовый путь сайта
      */
     public $base_url = null;
-
     /**
      * @var string путь к результирующему файлу
      */
     public $file_path = '';
-
-
     /**
      * @var string
      */
@@ -360,9 +353,9 @@ class ExportShopYandexMarketHandler extends ExportHandler
             $fields['element.' . $key] = $name;
         }
 
-        foreach ($element->relatedPropertiesModel->attributeLabels() as $key => $name)
+        foreach ($element->relatedProperties as $key => $name)
         {
-            $fields['property.' . $key] = $name . " [свойство]";
+            $fields['property.' . $name->code] = $name->name . " [свойство]";
         }
 
         $fields['image'] = 'Ссылка на главное изображение';
@@ -550,8 +543,8 @@ class ExportShopYandexMarketHandler extends ExportHandler
                         continue;
                     }
 
-                    if (!$element->shopProduct->baseProductPrice ||
-                        !$element->shopProduct->baseProductPrice->money->getValue()
+                    if (!$element->shopProduct->minProductPrice ||
+                        !$element->shopProduct->minProductPrice->money->getValue()
                     )
                     {
                         throw new Exception("Нет цены");
@@ -559,7 +552,7 @@ class ExportShopYandexMarketHandler extends ExportHandler
                     }
 
 
-                    if ((float) $element->shopProduct->baseProductPrice->money->amount == 0)
+                    if ((float) $element->shopProduct->minProductPrice->money->amount == 0)
                     {
                         throw new Exception("Цена = 0");
                         continue;
@@ -648,9 +641,9 @@ class ExportShopYandexMarketHandler extends ExportHandler
             $xoffer->appendChild(new \DOMElement('categoryId', $element->tree_id));
         }
 
-        if ($element->shopProduct->baseProductPrice)
+        if ($element->shopProduct->minProductPrice)
         {
-            $money = $element->shopProduct->baseProductPrice->money;
+            $money = $element->shopProduct->minProductPrice->money;
             $xoffer->appendChild(new \DOMElement('price', $money->getValue()));
             $xoffer->appendChild(new \DOMElement('currencyId', $money->getCurrency()->getCurrencyCode()));
         }
