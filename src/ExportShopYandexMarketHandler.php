@@ -501,16 +501,23 @@ class ExportShopYandexMarketHandler extends ExportHandler
      */
     protected function _appendOffers(\DOMElement $shop)
     {
-        $query =  ShopCmsContentElement::find()->where([
-            'content_id' => $this->content_id
-        ]);
+        $query =  ShopCmsContentElement::find()->joinWith('shopProduct as shopProduct')
+            ->where(['content_id' => $this->content_id])
+            ->andWhere(['in', 'shopProduct.product_type', [
+                ShopProduct::TYPE_SIMPLE,
+                ShopProduct::TYPE_OFFER
+            ]])
+        ;
         $totalCount = $query->count();
 
         $this->result->stdout("\tВсего товаров: {$totalCount}\n");
 
-        $activeTotalCount = ShopCmsContentElement::find()->active()->andWhere([
-            'content_id' => $this->content_id
-        ])->count();
+        $activeTotalCount = ShopCmsContentElement::find()->active()->joinWith('shopProduct as shopProduct')
+            ->where(['content_id' => $this->content_id])
+            ->andWhere(['in', 'shopProduct.product_type', [
+                ShopProduct::TYPE_SIMPLE,
+                ShopProduct::TYPE_OFFER
+            ]])->count();
 
         $this->result->stdout("\tАктивных товаров найдено: {$activeTotalCount}\n");
 
