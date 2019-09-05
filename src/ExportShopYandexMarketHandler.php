@@ -512,12 +512,7 @@ class ExportShopYandexMarketHandler extends ExportHandler
 
         $this->result->stdout("\tВсего товаров: {$totalCount}\n");
 
-        $activeTotalCount = ShopCmsContentElement::find()->active()->joinWith('shopProduct as shopProduct')
-            ->where(['content_id' => $this->content_id])
-            ->andWhere(['in', 'shopProduct.product_type', [
-                ShopProduct::TYPE_SIMPLE,
-                ShopProduct::TYPE_OFFER
-            ]])->count();
+        $activeTotalCount = $query->active()->count();
 
         $this->result->stdout("\tАктивных товаров найдено: {$activeTotalCount}\n");
 
@@ -540,8 +535,10 @@ class ExportShopYandexMarketHandler extends ExportHandler
             /**
              * @var ShopCmsContentElement $element
              */
-            foreach ($query->each(10) as $element)
+
+            foreach ($query->active()->each(10) as $element)
             {
+                $this->result->stdout("\tProduct: {$element->id}\n");
                 try
                 {
                     if (!$element->shopProduct)
@@ -549,41 +546,43 @@ class ExportShopYandexMarketHandler extends ExportHandler
                         throw new Exception("Нет данных для магазина");
                         continue;
                     }
+                    $this->result->stdout("\tShopProduct: {$element->shopProduct->id}\n");
 
-                    if (!$element->shopProduct->minProductPrice ||
-                        !$element->shopProduct->minProductPrice->money->getValue()
+                    if (!$element->shopProduct->minProductPriceSsh ||
+                        !$element->shopProduct->minProductPriceSsh->money->getValue()
                     )
                     {
                         throw new Exception("Нет цены");
                         continue;
                     }
 
-
-                    if ((float) $element->shopProduct->minProductPrice->money->amount == 0)
+                    if ((float) $element->shopProduct->minProductPriceSsh->money->amount == 0)
                     {
                         throw new Exception("Цена = 0");
                         continue;
                     }
-
+                    $this->result->stdout("\tQuantity: {$element->shopProduct->quantity}\n");
                     if ($element->shopProduct->quantity <= 0)
                     {
                         throw new Exception("Нет в наличии");
                         continue;
                     }
-
-
+                    $this->result->stdout("\tProduct type: {$element->shopProduct->product_type}\n");
                     if ($element->shopProduct->product_type == ShopProduct::TYPE_SIMPLE)
                     {
                         $this->_initOffer($xoffers, $element);
                     } else
                     {
                         $offers = $element->tradeOffers;
-                        foreach ($offers as $offer)
-                        {
-                            /*$xoffer = $xoffers->appendChild(new \DOMElement('offer'));
-                            $this->_initOffer($xoffer, $offer);*/
-                            $this->_initOffer($xoffers, $offer);
+                        if ($offers) {
+                            foreach ($offers as $offer)
+                            {
+                                /*$xoffer = $xoffers->appendChild(new \DOMElement('offer'));
+                                $this->_initOffer($xoffer, $offer);*/
+                                $this->_initOffer($xoffers, $offer);
+                            }
                         }
+
                     }
 
                     $successAdded ++;
@@ -648,9 +647,9 @@ class ExportShopYandexMarketHandler extends ExportHandler
             $xoffer->appendChild(new \DOMElement('categoryId', $element->tree_id));
         }
 
-        if ($element->shopProduct->minProductPrice)
+        if ($element->shopProduct->minProductPriceSsh)
         {
-            $money = $element->shopProduct->minProductPrice->money;
+            $money = $element->shopProduct->minProductPriceSsh->money;
             $xoffer->appendChild(new \DOMElement('price', $money->getValue()));
             $xoffer->appendChild(new \DOMElement('currencyId', $money->getCurrency()->getCurrencyCode()));
         }
