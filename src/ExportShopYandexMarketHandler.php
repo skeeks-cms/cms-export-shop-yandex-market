@@ -35,6 +35,7 @@ use yii\helpers\Console;
 use yii\helpers\FileHelper;
 use yii\helpers\Json;
 use yii\helpers\Url;
+use yii\helpers\VarDumper;
 use yii\widgets\ActiveForm;
 /**
  * @property CmsContent $cmsContent
@@ -508,16 +509,12 @@ class ExportShopYandexMarketHandler extends ExportHandler
                 ShopProduct::TYPE_OFFER
             ]])
         ;
+
         $totalCount = $query->count();
 
         $this->result->stdout("\tВсего товаров: {$totalCount}\n");
 
-        $activeTotalCount = ShopCmsContentElement::find()->active()->joinWith('shopProduct as shopProduct')
-            ->where(['content_id' => $this->content_id])
-            ->andWhere(['in', 'shopProduct.product_type', [
-                ShopProduct::TYPE_SIMPLE,
-                ShopProduct::TYPE_OFFER
-            ]])->count();
+        $activeTotalCount = $query->active()->count();
 
         $this->result->stdout("\tАктивных товаров найдено: {$activeTotalCount}\n");
 
@@ -589,6 +586,8 @@ class ExportShopYandexMarketHandler extends ExportHandler
                     $successAdded ++;
                 } catch (\Exception $e)
                 {
+                    //echo VarDumper::dumpAsString($e, 3);
+
                     $this->result->stdout("\t\t{$element->id} — {$e->getMessage()}\n", Console::FG_RED);
                     continue;
                 }
