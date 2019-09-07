@@ -569,19 +569,7 @@ class ExportShopYandexMarketHandler extends ExportHandler
                     }
 
 
-                    if ($element->shopProduct->product_type == ShopProduct::TYPE_SIMPLE)
-                    {
-                        $this->_initOffer($xoffers, $element);
-                    } else
-                    {
-                        $offers = $element->tradeOffers;
-                        foreach ($offers as $offer)
-                        {
-                            /*$xoffer = $xoffers->appendChild(new \DOMElement('offer'));
-                            $this->_initOffer($xoffer, $offer);*/
-                            $this->_initOffer($xoffers, $offer);
-                        }
-                    }
+                    $this->_initOffer($xoffers, $element);
 
                     $successAdded ++;
                 } catch (\Exception $e)
@@ -639,7 +627,13 @@ class ExportShopYandexMarketHandler extends ExportHandler
 
         if ($element->image)
         {
-            $xoffer->appendChild(new \DOMElement('picture', htmlspecialchars($this->base_url . $element->image->src)));
+            $xoffer->appendChild(new \DOMElement('picture', htmlspecialchars($element->image->absoluteSrc)));
+        } else {
+            if ($element->parent_content_element_id) {
+                if ($element->parentContentElement->image) {
+                    $xoffer->appendChild(new \DOMElement('picture', htmlspecialchars($element->parentContentElement->image->absoluteSrc)));
+                }
+            }
         }
 
         if ($element->tree_id)
@@ -665,6 +659,13 @@ class ExportShopYandexMarketHandler extends ExportHandler
                     {
                         $smartName = $element->relatedPropertiesModel->getSmartAttribute($propertyName);
                         $xoffer->appendChild(new \DOMElement('vendor', $smartName));
+                    } else {
+                        if ($element->parent_content_element_id) {
+                            if ($value = $element->parentContentElement->relatedPropertiesModel->getAttribute($propertyName)) {
+                                $smartName = $element->parentContentElement->relatedPropertiesModel->getSmartAttribute($propertyName);
+                                $xoffer->appendChild(new \DOMElement('vendor', $smartName));
+                            }
+                        }
                     }
                 }
             }
