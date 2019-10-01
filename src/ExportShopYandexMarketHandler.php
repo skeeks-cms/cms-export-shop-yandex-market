@@ -593,6 +593,24 @@ class ExportShopYandexMarketHandler extends ExportHandler
             throw new Exception("Нет данных для магазина");
         }
 
+        $img = false;
+        if ($element->image)
+        {
+            $img = true;
+        } else {
+            if ($element->parent_content_element_id) {
+                if ($element->parentContentElement->image) {
+                    $img = false;
+                    $xoffer->appendChild(new \DOMElement('picture', htmlspecialchars($element->parentContentElement->image->absoluteSrc)));
+                }
+            }
+        }
+
+        if (!$img) {
+            throw new Exception("У товара не задано фото.");
+        }
+
+
         if ($this->filter_property && $this->filter_property_value)
         {
             $propertyName = $this->getRelatedPropertyName($this->filter_property);
@@ -635,6 +653,8 @@ class ExportShopYandexMarketHandler extends ExportHandler
                 }
             }
         }
+
+
 
         if ($element->tree_id)
         {
