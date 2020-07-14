@@ -6,6 +6,7 @@
  * @date 29.08.2016
  */
 namespace skeeks\cms\exportShopYandexMarket;
+use skeeks\cms\backend\widgets\SelectModelDialogTreeWidget;
 use skeeks\cms\cmsWidgets\treeMenu\TreeMenuCmsWidget;
 use skeeks\cms\export\ExportHandler;
 use skeeks\cms\export\ExportHandlerFilePath;
@@ -25,6 +26,7 @@ use skeeks\cms\relatedProperties\propertyTypes\PropertyTypeList;
 use skeeks\cms\shop\models\ShopCmsContentElement;
 use skeeks\cms\shop\models\ShopProduct;
 use skeeks\cms\widgets\formInputs\selectTree\SelectTree;
+use skeeks\cms\widgets\formInputs\selectTree\SelectTreeInputWidget;
 use skeeks\modules\cms\money\models\Currency;
 use yii\base\Exception;
 use yii\bootstrap\Alert;
@@ -240,9 +242,10 @@ class ExportShopYandexMarketHandler extends ExportHandler
         ]);
 
         echo $form->field($this, 'tree_id')->widget(
-            SelectTree::className(),
-            [
-                'mode' => SelectTree::MOD_SINGLE
+            SelectModelDialogTreeWidget::className(), [
+                /*'treeWidgetOptions'         => [
+                    'models' => CmsTree::findRoots()->cmsSite()->all(),
+                ],*/
             ]
         );
 
@@ -388,8 +391,8 @@ class ExportShopYandexMarketHandler extends ExportHandler
     {
 
         //TODO: if console app
-        \Yii::$app->urlManager->baseUrl = $this->base_url;
-        \Yii::$app->urlManager->scriptUrl = $this->base_url;
+        /*\Yii::$app->urlManager->baseUrl = $this->base_url;
+        \Yii::$app->urlManager->scriptUrl = $this->base_url;*/
 
         ini_set("memory_limit","8192M");
         set_time_limit(0);
@@ -407,7 +410,9 @@ class ExportShopYandexMarketHandler extends ExportHandler
 
         $imp = new \DOMImplementation();
 		$dtd = $imp->createDocumentType('yml_catalog', '', "shops.dtd");
-		$xml               = $imp->createDocument('', '', $dtd);
+		//$xml               = $imp->createDocument('', '', $dtd);
+		$xml               = $imp->createDocument('', '');
+		//$xml->version     = '1.1';
 		$xml->encoding     = 'utf-8';
 		//$xml->formatOutput = true;
 
@@ -502,7 +507,7 @@ class ExportShopYandexMarketHandler extends ExportHandler
      */
     protected function _appendOffers(\DOMElement $shop)
     {
-        $query =  ShopCmsContentElement::find()->joinWith('shopProduct as shopProduct')
+        $query =  ShopCmsContentElement::find()->cmsSite()->joinWith('shopProduct as shopProduct')
             ->where(['content_id' => $this->content_id])
             ->andWhere(['in', 'shopProduct.product_type', [
                 ShopProduct::TYPE_SIMPLE,
@@ -593,22 +598,10 @@ class ExportShopYandexMarketHandler extends ExportHandler
             throw new Exception("Нет данных для магазина");
         }
 
-        $img = false;
-        if ($element->image)
+        if (!$element->mainProductImage)
         {
-            $img = true;
-        } else {
-            if ($element->parent_content_element_id) {
-                if ($element->parentContentElement->image) {
-                    $img = false;
-                    $xoffer->appendChild(new \DOMElement('picture', htmlspecialchars($element->parentContentElement->image->absoluteSrc)));
-                }
-            }
-        }
-
-        if (!$img) {
             throw new Exception("У товара не задано фото.");
-        }
+        } 
 
 
         if ($this->filter_property && $this->filter_property_value)
@@ -640,19 +633,16 @@ class ExportShopYandexMarketHandler extends ExportHandler
             //$xoffer->appendChild(new \DOMAttr('available', 'false'));
         }
 
-        $xoffer->appendChild(new \DOMElement('url', htmlspecialchars($element->url)));
-        $xoffer->appendChild(new \DOMElement('name', htmlspecialchars($element->name)));
-
-        if ($element->image)
-        {
-            $xoffer->appendChild(new \DOMElement('picture', htmlspecialchars($element->image->absoluteSrc)));
+        $xoffer->appendChild(new \DOMElement('url', htmlspecialchars($element->absoluteUrl)));
+        $xoffer->appendChild(new \DOMElement('name', htmlspecialchars($element->productName)));
+        $xoffer->appendChild(new \DOMElement('picture', htmlspecialchars($element->mainProductImage->absoluteSrc)));
+        
+        if ($element->productDescriptionShort) {
+            $xoffer->appendChild(new \DOMElement('description', htmlspecialchars($element->productDescriptionShort)));
         } else {
-            if ($element->parent_content_element_id) {
-                if ($element->parentContentElement->image) {
-                    $xoffer->appendChild(new \DOMElement('picture', htmlspecialchars($element->parentContentElement->image->absoluteSrc)));
-                }
-            }
+            $xoffer->appendChild(new \DOMElement('description', htmlspecialchars($element->productName)));
         }
+        
 
 
 
