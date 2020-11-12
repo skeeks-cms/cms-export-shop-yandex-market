@@ -633,8 +633,10 @@ class ExportShopYandexMarketHandler extends ExportHandler
             //$xoffer->appendChild(new \DOMAttr('available', 'false'));
         }
 
+        $name = htmlspecialchars($element->productName);
         $xoffer->appendChild(new \DOMElement('url', htmlspecialchars($element->absoluteUrl)));
-        $xoffer->appendChild(new \DOMElement('name', htmlspecialchars($element->productName)));
+        $xoffer->appendChild(new \DOMElement('name', $name));
+        $xoffer->appendChild(new \DOMElement('model', $name));
         $xoffer->appendChild(new \DOMElement('picture', htmlspecialchars($element->mainProductImage->absoluteSrc)));
         
         if ($element->productDescriptionShort) {
@@ -681,9 +683,10 @@ class ExportShopYandexMarketHandler extends ExportHandler
             }
         }
 
-        if ($this->vendor_code)
-        {
-            if ($propertyName = $this->getRelatedPropertyName($this->vendor_code))
+        if ($this->vendor_code) {
+            if ($propertyName = $this->getElementName($this->vendor_code)) {
+                $xoffer->appendChild(new \DOMElement('vendorCode', $element->$propertyName));
+            } else if ($propertyName = $this->getRelatedPropertyName($this->vendor_code))
             {
                 if ($element->relatedPropertiesModel)
                 {
@@ -694,6 +697,8 @@ class ExportShopYandexMarketHandler extends ExportHandler
                     }
                 }
             }
+            
+            
         }
 
         if ($this->default_delivery)
