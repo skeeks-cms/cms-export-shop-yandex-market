@@ -25,9 +25,11 @@ use skeeks\cms\relatedProperties\propertyTypes\PropertyTypeElement;
 use skeeks\cms\relatedProperties\propertyTypes\PropertyTypeList;
 use skeeks\cms\shop\models\ShopCmsContentElement;
 use skeeks\cms\shop\models\ShopProduct;
+use skeeks\cms\shop\models\ShopStore;
 use skeeks\cms\widgets\formInputs\selectTree\SelectTree;
 use skeeks\cms\widgets\formInputs\selectTree\SelectTreeInputWidget;
 use skeeks\modules\cms\money\models\Currency;
+use skeeks\widget\chosen\Chosen;
 use yii\base\Exception;
 use yii\bootstrap\Alert;
 use yii\console\Application;
@@ -78,6 +80,11 @@ class ExportShopYandexMarketHandler extends ExportHandler
      */
     public $shop_company = '';
 
+    /**
+     * @var
+     */
+    public $shop_store_ids;
+
 
     /**
      * @var string
@@ -100,6 +107,8 @@ class ExportShopYandexMarketHandler extends ExportHandler
 
     public $filter_property = '';
     public $filter_property_value = '';
+
+
 
 
     public function init()
@@ -174,6 +183,8 @@ class ExportShopYandexMarketHandler extends ExportHandler
 
             ['filter_property' , 'string'],
             ['filter_property_value' , 'string'],
+
+            ['shop_store_ids' , 'safe'],
         ]);
     }
 
@@ -196,6 +207,8 @@ class ExportShopYandexMarketHandler extends ExportHandler
 
             'filter_property'        => \Yii::t('skeeks/exportShopYandexMarket', 'Признак выгрузки'),
             'filter_property_value'        => \Yii::t('skeeks/exportShopYandexMarket', 'Значение'),
+
+            'shop_store_ids'        => \Yii::t('skeeks/exportShopYandexMarket', 'Склады/Поставщики/Магазины'),
         ]);
     }
     public function attributeHints()
@@ -207,6 +220,9 @@ class ExportShopYandexMarketHandler extends ExportHandler
             'default_delivery'        => \Yii::t('skeeks/exportShopYandexMarket', 'Для всех товаров магазина, по умолчанию'),
             'default_pickup'        => \Yii::t('skeeks/exportShopYandexMarket', 'Для всех товаров магазина, по умолчанию'),
             'default_store'        => \Yii::t('skeeks/exportShopYandexMarket', 'Для всех товаров магазина, по умолчанию'),
+
+            'shop_store_ids'        => \Yii::t('skeeks/exportShopYandexMarket', 'Товары которые в наличии на этих складах будут добавляться в файл'),
+
             'default_sales_notes'        => \Yii::t('skeeks/exportShopYandexMarket', 'Элемент используется для отражения информации о:
  минимальной сумме заказа, минимальной партии товара, необходимости предоплаты (указание элемента обязательно);
  вариантах оплаты, описания акций и распродаж (указание элемента необязательно).
@@ -299,6 +315,14 @@ class ExportShopYandexMarketHandler extends ExportHandler
                 ],
                 'body' => 'В выгрузку попадают только активные товары и предложения. Дополнительно можно ограничить выборку опциями ниже.'
             ]);
+
+            echo $form->field($this, 'shop_store_ids')->widget(
+                Chosen::class,
+                [
+                    'items' => ArrayHelper::map(ShopStore::find()->cmsSite()->all(), 'id', 'asText'),
+                    'multiple' => true
+                ]
+            );
 
             echo $form->field($this, 'filter_property')->listBox(
                 ArrayHelper::merge(['' => ' - '], $this->getAvailableFields()), [
@@ -507,21 +531,27 @@ class ExportShopYandexMarketHandler extends ExportHandler
      */
     protected function _appendOffers(\DOMElement $shop)
     {
-        $query =  ShopCmsContentElement::find()->cmsSite()->joinWith('shopProduct as shopProduct')
+        $query =  ShopCmsContentElement::find()
+            ->active()
+            ->cmsSite()
+            ->joinWith('shopProduct as shopProduct')
+            ->joinWith('shopProduct.shopStoreProducts as shopStoreProducts')
             ->where(['content_id' => $this->content_id])
             ->andWhere(['in', 'shopProduct.product_type', [
                 ShopProduct::TYPE_SIMPLE,
                 ShopProduct::TYPE_OFFER
             ]])
+            ->andWhere(['in', 'shopStoreProducts.shop_store_id', $this->shop_store_ids])
+            ->andWhere(['>', 'shopStoreProducts.quantity', 0])
+            ->groupBy(ShopCmsContentElement::tableName() . ".id")
         ;
 
-        $totalCount = $query->count();
+        /*$totalCount = $query->count();
 
         $this->result->stdout("\tВсего товаров: {$totalCount}\n");
 
         $activeTotalCount = $query->active()->count();
-
-        $this->result->stdout("\tАктивных товаров найдено: {$activeTotalCount}\n");
+        $this->result->stdout("\tАктивных товаров найдено: {$activeTotalCount}\n");*/
 
         /**
          * Массив подразделов заданной категории
@@ -535,7 +565,10 @@ class ExportShopYandexMarketHandler extends ExportHandler
             $query->andWhere(['tree_id' => ArrayHelper::map($trees, 'id', 'id')]);
         }
 
-        if ($activeTotalCount)
+        $totalCount = $query->count();
+        $this->result->stdout("\tВсего товаров: {$totalCount}\n");
+
+        if ($totalCount)
         {
             $successAdded = 0;
             $xoffers = $shop->appendChild(new \DOMElement('offers'));
@@ -567,11 +600,11 @@ class ExportShopYandexMarketHandler extends ExportHandler
                         continue;
                     }
 
-                    if ($element->shopProduct->quantity <= 0)
+                    /*if ($element->shopProduct->quantity <= 0)
                     {
                         throw new Exception("Нет в наличии");
                         continue;
-                    }
+                    }*/
 
 
                     $this->_initOffer($xoffers, $element);
@@ -624,14 +657,15 @@ class ExportShopYandexMarketHandler extends ExportHandler
         $xoffer->appendChild(new \DOMAttr('id', $element->id));
 
 
-        if ($element->shopProduct->quantity)
+        $xoffer->appendChild(new \DOMAttr('available', 'true'));
+
+        /*if ($element->shopProduct->quantity)
         {
             $xoffer->appendChild(new \DOMAttr('available', 'true'));
         } else
         {
             throw new Exception("Нет в наличии");
-            //$xoffer->appendChild(new \DOMAttr('available', 'false'));
-        }
+        }*/
 
         $name = htmlspecialchars($element->productName);
         $xoffer->appendChild(new \DOMElement('url', htmlspecialchars($element->absoluteUrl)));
