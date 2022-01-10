@@ -541,10 +541,17 @@ class ExportShopYandexMarketHandler extends ExportHandler
                 ShopProduct::TYPE_SIMPLE,
                 ShopProduct::TYPE_OFFER
             ]])
-            ->andWhere(['in', 'shopStoreProducts.shop_store_id', $this->shop_store_ids])
-            ->andWhere(['>', 'shopStoreProducts.quantity', 0])
+
+
             ->groupBy(ShopCmsContentElement::tableName() . ".id")
         ;
+
+        if ($this->shop_store_ids) {
+            $query
+                ->andWhere(['in', 'shopStoreProducts.shop_store_id', $this->shop_store_ids])
+                ->andWhere(['>', 'shopStoreProducts.quantity', 0])
+            ;
+        }
 
         /*$totalCount = $query->count();
 
