@@ -694,11 +694,23 @@ class ExportShopYandexMarketHandler extends ExportHandler
             $xoffer->appendChild(new \DOMElement('categoryId', $element->tree_id));
         }
 
+        if ($element->is_adult)
+        {
+            $xoffer->appendChild(new \DOMElement('adult', 'true'));
+        }
+
         if ($element->shopProduct->minProductPrice)
         {
             $money = $element->shopProduct->minProductPrice->money;
             $xoffer->appendChild(new \DOMElement('price', $money->getValue()));
             $xoffer->appendChild(new \DOMElement('currencyId', $money->getCurrency()->getCurrencyCode()));
+        }
+
+        if ($element->shopProduct->shopProductBarcodes) {
+            foreach ($element->shopProduct->shopProductBarcodes as $borcode)
+            {
+                $xoffer->appendChild(new \DOMElement('barcode', $borcode->value));
+            }
         }
 
 
