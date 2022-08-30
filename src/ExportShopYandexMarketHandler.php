@@ -713,6 +713,30 @@ class ExportShopYandexMarketHandler extends ExportHandler
             }
         }
 
+        
+
+        $shopProduct = $element->shopProduct;
+        if ($shopProduct->weight) {
+            $weight = $shopProduct->weight / 1000;
+            $weight = round($weight, 3);
+            
+            $xoffer->appendChild(new \DOMElement('weight', $weight));
+        }
+
+        /**
+         * @see https://yandex.ru/support/partnermarket/offers.html
+         * Габариты товара (длина, ширина, высота) в упаковке. Размеры укажите в сантиметрах.
+         */
+        
+        if ($shopProduct->height && $shopProduct->length && $shopProduct->width) {
+            $dimensions = [];
+            $dimensions[] = round($shopProduct->length / 10, 3);
+            $dimensions[] = round($shopProduct->width / 10, 3);
+            $dimensions[] = round($shopProduct->height / 10, 3);
+            
+            $xoffer->appendChild(new \DOMElement('dimensions', implode("/", $dimensions)));
+        }
+
 
         if ($this->vendor)
         {
