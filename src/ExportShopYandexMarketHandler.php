@@ -761,16 +761,13 @@ class ExportShopYandexMarketHandler extends ExportHandler
         //Выгружать вес товара?
         if ($this->is_description) {
             if ($element->productDescriptionFull) {
-                $description = "<![CDATA[
-                {$element->productDescriptionFull}
-                ]]>";
-                $description = htmlspecialchars($description);
+                $description = $element->productDescriptionFull;
 
-                $xoffer->appendChild(new \DOMElement('description', $description));
+                $xoffer->appendChild(new \DOMElement('description'))->appendChild(new \DOMCdataSection($description));
             } elseif ($element->productDescriptionShort) {
-                $xoffer->appendChild(new \DOMElement('description', htmlspecialchars($element->productDescriptionShort)));
+                $xoffer->appendChild(new \DOMElement('description'))->appendChild(new \DOMCdataSection($element->productDescriptionShort));
             } else {
-                $xoffer->appendChild(new \DOMElement('description', htmlspecialchars($element->productName)));
+                $xoffer->appendChild(new \DOMElement('description'))->appendChild(new \DOMCdataSection($element->productName));
             }
         }
 
