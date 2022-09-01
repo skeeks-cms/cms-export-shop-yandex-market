@@ -106,7 +106,7 @@ class ExportShopYandexMarketHandler extends ExportHandler
 
     public $is_barcodes = 0;
     public $is_weight = 0;
-    public $is_description = 0;
+    public $is_description = 1;
     public $is_dimensions = 0;
 
 
