@@ -25,12 +25,14 @@ use skeeks\cms\relatedProperties\propertyTypes\PropertyTypeList;
 use skeeks\cms\shop\models\ShopCmsContentElement;
 use skeeks\cms\shop\models\ShopProduct;
 use skeeks\cms\shop\models\ShopStore;
+use skeeks\cms\shop\models\ShopStoreProduct;
 use skeeks\modules\cms\money\models\Currency;
 use skeeks\widget\chosen\Chosen;
 use yii\base\Exception;
 use yii\bootstrap\Alert;
 use yii\console\Application;
 use yii\db\ActiveQuery;
+use yii\db\Expression;
 use yii\helpers\ArrayHelper;
 use yii\helpers\Console;
 use yii\helpers\FileHelper;
@@ -109,6 +111,8 @@ class ExportShopYandexMarketHandler extends ExportHandler
     public $is_description = 1;
     public $is_dimensions = 0;
 
+    public $is_count = 0;
+
 
     public $filter_property = '';
     public $filter_property_value = '';
@@ -164,6 +168,7 @@ class ExportShopYandexMarketHandler extends ExportHandler
 
             ['is_barcodes', 'integer'],
             ['is_dimensions', 'integer'],
+            ['is_count', 'integer'],
             ['is_weight', 'integer'],
             ['is_description', 'integer'],
 
@@ -202,6 +207,7 @@ class ExportShopYandexMarketHandler extends ExportHandler
             'is_weight'     => "Выгружать вес?",
             'is_description'     => "Выгружать описание?",
             'is_dimensions' => "Выгружать габариты (длина, ширина, высота)?",
+            'is_count' => "Передавать количество товаров?",
             'country_of_origin'        => "Страна производства товара",
             'vendor'        => \Yii::t('skeeks/exportShopYandexMarket', 'Производитель или бренд'),
             'vendor_code'   => \Yii::t('skeeks/exportShopYandexMarket', 'Артикул производителя'),
@@ -364,6 +370,12 @@ class ExportShopYandexMarketHandler extends ExportHandler
                 'size' => 1,
             ]);
             echo $form->field($this, 'is_dimensions')->listBox(
+                \Yii::$app->formatter->booleanFormat, [
+                'size' => 1,
+            ]);
+
+
+            echo $form->field($this, 'is_count')->listBox(
                 \Yii::$app->formatter->booleanFormat, [
                 'size' => 1,
             ]);
@@ -584,6 +596,7 @@ class ExportShopYandexMarketHandler extends ExportHandler
     protected function _appendOffers(\DOMElement $shop)
     {
         $query = ShopCmsContentElement::find()
+
             ->active()
             ->cmsSite()
             ->joinWith('shopProduct as shopProduct')
@@ -599,7 +612,20 @@ class ExportShopYandexMarketHandler extends ExportHandler
             ])
             ->groupBy(ShopCmsContentElement::tableName().".id");
 
+        $query->select([
+            ShopCmsContentElement::tableName() . ".*"
+        ]);
+
         if ($this->shop_store_ids) {
+
+            $subQuery = ShopStoreProduct::find()->select(["quantity" => new Expression("sum(quantity)")])->andWhere(
+                ['shop_product_id' => new Expression("shopProduct.id")],
+            )->andWhere(['shop_store_id' => $this->shop_store_ids]);
+
+            $query->addSelect([
+                'quantity' => $subQuery,
+            ]);
+
             $query
                 ->andWhere(['in', 'shopStoreProducts.shop_store_id', $this->shop_store_ids])
                 ->andWhere(['>', 'shopStoreProducts.quantity', 0]);
@@ -869,10 +895,45 @@ class ExportShopYandexMarketHandler extends ExportHandler
             }
         }
 
+        if ($shopProduct->expiration_time) {
+            $xoffer->appendChild(new \DOMElement('expiry', $this->getIso8601Time($shopProduct->expiration_time)));
+        } elseif ($shopProduct->warranty_time) {
+            $xoffer->appendChild(new \DOMElement('expiry', $this->getIso8601Time($shopProduct->warranty_time)));
+        }
+
         if ($this->default_sales_notes) {
             $xoffer->appendChild(new \DOMElement('sales_notes', $this->default_sales_notes));
         }
 
+
+        if ($this->is_count) {
+            /**
+             * @link https://yandex.ru/support/marketplace/assortment/auto/yml.html#offers
+             */
+            $xoffer->appendChild(new \DOMElement('count', (int) $element->raw_row['quantity']));
+        }
+
+
         return $xoffer;
+    }
+
+    /**
+     * @param $hours
+     * @return string
+     */
+    public function getIso8601Time($hours)
+    {
+        if ($hours >= 8640) {
+            $total = round($hours/8640);
+            return "P{$total}Y0M0DT0H";
+        } elseif($hours >= 720) {
+            $total = round($hours/720);
+            return "P0Y{$total}M0DT0H";
+        } elseif ($hours >= 24) {
+            $total = round($hours/720);
+            return "P0Y0M{$total}DT0H";
+        } else {
+            return "P0Y0M0DT{$hours}H";
+        }
     }
 }
