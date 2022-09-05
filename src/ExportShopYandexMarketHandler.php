@@ -24,6 +24,7 @@ use skeeks\cms\relatedProperties\PropertyType;
 use skeeks\cms\relatedProperties\propertyTypes\PropertyTypeList;
 use skeeks\cms\shop\models\ShopCmsContentElement;
 use skeeks\cms\shop\models\ShopProduct;
+use skeeks\cms\shop\models\ShopProductPrice;
 use skeeks\cms\shop\models\ShopStore;
 use skeeks\cms\shop\models\ShopStoreProduct;
 use skeeks\modules\cms\money\models\Currency;
@@ -111,6 +112,9 @@ class ExportShopYandexMarketHandler extends ExportHandler
     public $is_description = 1;
     public $is_dimensions = 0;
 
+    public $filter_price_from = 0;
+    public $filter_price_to = 0;
+
     public $is_count = 0;
 
 
@@ -168,6 +172,8 @@ class ExportShopYandexMarketHandler extends ExportHandler
 
             ['is_barcodes', 'integer'],
             ['is_dimensions', 'integer'],
+            ['filter_price_from', 'number'],
+            ['filter_price_to', 'number'],
             ['is_count', 'integer'],
             ['is_weight', 'integer'],
             ['is_description', 'integer'],
@@ -207,6 +213,8 @@ class ExportShopYandexMarketHandler extends ExportHandler
             'is_weight'     => "Выгружать вес?",
             'is_description'     => "Выгружать описание?",
             'is_dimensions' => "Выгружать габариты (длина, ширина, высота)?",
+            'filter_price_from' => "Розничная цена (от)",
+            'filter_price_to' => "Розничная цена (до)",
             'is_count' => "Передавать количество товаров?",
             'country_of_origin'        => "Страна производства товара",
             'vendor'        => \Yii::t('skeeks/exportShopYandexMarket', 'Производитель или бренд'),
@@ -233,6 +241,8 @@ class ExportShopYandexMarketHandler extends ExportHandler
             'is_barcodes'      => "Штрикоды товара будут выгружены, толкьо если они заданы у товара",
             'is_weight'        => "Вес товара будет выгружен, только если он задан у товара",
             'is_description'        => "Описание товара будет выгружено, только если оно задано у товара",
+            'filter_price_from'        => "Выгружать товары только от этой цены",
+            'filter_price_to'        => "Выгружать товары только до этой цены",
             'is_dimensions'    => "Габариты товара будут выгружены только если они заданы у товара",
             'shop_name'        => \Yii::t('skeeks/exportShopYandexMarket', 'Короткое название магазина, должно содержать не более 20 символов. В названии нельзя использовать слова, не имеющие отношения к наименованию магазина, например «лучший», «дешевый», указывать номер телефона и т. п.
 Название магазина должно совпадать с фактическим названием магазина, которое публикуется на сайте. При несоблюдении данного требования наименование может быть изменено Яндекс.Маркетом самостоятельно без уведомления магазина.'),
@@ -405,6 +415,25 @@ class ExportShopYandexMarketHandler extends ExportHandler
                     'multiple' => true,
                 ]
             );
+
+            echo '
+<div class="row">
+
+    <div class="col-md-4 col-12">
+    ';
+      echo $form->field($this, 'filter_price_from')->input('number');
+                    echo '
+    </div>
+    <div class="col-md-4 col-12">
+    ';
+      echo $form->field($this, 'filter_price_to')->input('number');
+                    echo '
+    </div>
+
+</div>
+';
+
+
 
             echo $form->field($this, 'filter_property')->listBox(
                 ArrayHelper::merge(['' => ' - '], $this->getAvailableFields()), [
@@ -599,7 +628,7 @@ class ExportShopYandexMarketHandler extends ExportHandler
 
             ->active()
             ->cmsSite()
-            ->joinWith('shopProduct as shopProduct')
+            ->innerJoinWith('shopProduct as shopProduct')
             ->joinWith('shopProduct.shopStoreProducts as shopStoreProducts')
             ->where(['content_id' => $this->content_id])
             ->andWhere([
@@ -616,6 +645,32 @@ class ExportShopYandexMarketHandler extends ExportHandler
             ShopCmsContentElement::tableName() . ".*"
         ]);
 
+        $defaultTypePrice = \Yii::$app->skeeks->site->getShopTypePrices()->andWhere(['is_default' => 1])->one();
+
+        if ($this->filter_price_from || $this->filter_price_to) {
+
+            $query->leftJoin(["p{$defaultTypePrice->id}" => ShopProductPrice::tableName()], [
+                "p{$defaultTypePrice->id}.product_id"    => new Expression("shopProduct.id"),
+                "p{$defaultTypePrice->id}.type_price_id" => $defaultTypePrice->id,
+            ]);
+
+            $query->addSelect([
+                'retail_price_filter' => new Expression("(p{$defaultTypePrice->id}.price)"),
+            ]);
+
+            if ($this->filter_price_from) {
+                $query->andHaving([
+                    '>=', 'retail_price_filter',  (float) $this->filter_price_from
+                ]);
+            }
+            if ($this->filter_price_to) {
+                $query->andHaving([
+                    '<=', 'retail_price_filter',  (float) $this->filter_price_to
+                ]);
+            }
+
+        }
+        
         if ($this->shop_store_ids) {
 
             $subQuery = ShopStoreProduct::find()->select(["quantity" => new Expression("sum(quantity)")])->andWhere(
