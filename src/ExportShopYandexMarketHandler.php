@@ -116,6 +116,7 @@ class ExportShopYandexMarketHandler extends ExportHandler
     public $filter_price_to = 0;
 
     public $is_count = 0;
+    public $is_params = 0;
 
 
     public $filter_property = '';
@@ -177,6 +178,7 @@ class ExportShopYandexMarketHandler extends ExportHandler
             ['is_count', 'integer'],
             ['is_weight', 'integer'],
             ['is_description', 'integer'],
+            ['is_params', 'integer'],
 
             ['base_url', 'required'],
             ['base_url', 'url'],
@@ -212,6 +214,7 @@ class ExportShopYandexMarketHandler extends ExportHandler
             'is_barcodes'   => "Выгружать штрихкоды?",
             'is_weight'     => "Выгружать вес?",
             'is_description'     => "Выгружать описание?",
+            'is_params'     => "Выгружать характеристики?",
             'is_dimensions' => "Выгружать габариты (длина, ширина, высота)?",
             'filter_price_from' => "Розничная цена (от)",
             'filter_price_to' => "Розничная цена (до)",
@@ -395,7 +398,12 @@ class ExportShopYandexMarketHandler extends ExportHandler
                 \Yii::$app->formatter->booleanFormat, [
                 'size' => 1,
             ]);
-            
+
+            echo $form->field($this, 'is_params')->listBox(
+                \Yii::$app->formatter->booleanFormat, [
+                'size' => 1,
+            ]);
+
             
             echo BlockTitleWidget::widget([
                 'content' => 'Фильтрация',
@@ -779,6 +787,7 @@ class ExportShopYandexMarketHandler extends ExportHandler
             }
         }
 
+        $this->result->stdout("\t{$element->id}\n");
 
         $xoffer = $xoffers->appendChild(new \DOMElement('offer'));
         $xoffer->appendChild(new \DOMAttr('id', $element->id));
@@ -851,6 +860,8 @@ class ExportShopYandexMarketHandler extends ExportHandler
                 $xoffer->appendChild(new \DOMElement('description'))->appendChild(new \DOMCdataSection($element->productName));
             }
         }
+
+
 
         
 
@@ -967,6 +978,46 @@ class ExportShopYandexMarketHandler extends ExportHandler
              */
             $xoffer->appendChild(new \DOMElement('count', (int) $element->raw_row['quantity']));
         }
+
+
+        if ($this->is_params) {
+            $rp = $element->relatedPropertiesModel;
+            $rp->initAllProperties();
+            foreach ($rp->toArray() as $code => $value)
+            {
+                if ($value) {
+                    $property = $rp->getRelatedProperty($code);
+
+                    
+
+                    if ($property->property_type == PropertyType::CODE_NUMBER) {
+                        $xParam = new \DOMElement('param', $rp->getAttributeAsText($code));
+                        $xoffer->appendChild($xParam);
+                        $xParam->setAttribute('name', $property->name);
+                        $xParam->setAttribute('unit', $property->cmsMeasure->symbol);
+                    }  elseif ($property->property_type == PropertyType::CODE_LIST) {
+                        if ($property->is_multiple) {
+                            $data = $property->getEnums()->andWhere(['id' => $value])->select(['code', 'value'])->limit(10)->asArray()->all();
+                            if ($data) {
+                                foreach ($data as $key => $row)
+                                {
+                                    $xParam = new \DOMElement('param', ArrayHelper::getValue($row, 'value'));
+                                    $xoffer->appendChild($xParam);
+                                    $xParam->setAttribute('name', $property->name);
+                                }
+                            }
+                        }
+                    } else {
+                        $xParam = new \DOMElement('param', $rp->getAttributeAsText($code));
+                        $xoffer->appendChild($xParam);
+                        $xParam->setAttribute('name', $property->name);
+                    }
+                }
+
+            }
+        }
+
+
 
 
         return $xoffer;
