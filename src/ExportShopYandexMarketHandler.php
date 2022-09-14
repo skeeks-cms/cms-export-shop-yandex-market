@@ -117,6 +117,7 @@ class ExportShopYandexMarketHandler extends ExportHandler
 
     public $is_count = 0;
     public $is_params = 0;
+    public $is_second_images = 0;
 
 
     public $filter_property = '';
@@ -179,6 +180,7 @@ class ExportShopYandexMarketHandler extends ExportHandler
             ['is_weight', 'integer'],
             ['is_description', 'integer'],
             ['is_params', 'integer'],
+            ['is_second_images', 'integer'],
 
             ['base_url', 'required'],
             ['base_url', 'url'],
@@ -215,6 +217,7 @@ class ExportShopYandexMarketHandler extends ExportHandler
             'is_weight'     => "Выгружать вес?",
             'is_description'     => "Выгружать описание?",
             'is_params'     => "Выгружать характеристики?",
+            'is_second_images'     => "Выгружать дополнительныее изображения?",
             'is_dimensions' => "Выгружать габариты (длина, ширина, высота)?",
             'filter_price_from' => "Розничная цена (от)",
             'filter_price_to' => "Розничная цена (до)",
@@ -247,6 +250,7 @@ class ExportShopYandexMarketHandler extends ExportHandler
             'filter_price_from'        => "Выгружать товары только от этой цены",
             'filter_price_to'        => "Выгружать товары только до этой цены",
             'is_dimensions'    => "Габариты товара будут выгружены только если они заданы у товара",
+            'is_second_images'    => "Главное изображение товара выгружается в любом случае. С этой опцией есть возможность выгрузить все фото товара.",
             'shop_name'        => \Yii::t('skeeks/exportShopYandexMarket', 'Короткое название магазина, должно содержать не более 20 символов. В названии нельзя использовать слова, не имеющие отношения к наименованию магазина, например «лучший», «дешевый», указывать номер телефона и т. п.
 Название магазина должно совпадать с фактическим названием магазина, которое публикуется на сайте. При несоблюдении данного требования наименование может быть изменено Яндекс.Маркетом самостоятельно без уведомления магазина.'),
             'shop_company'     => \Yii::t('skeeks/exportShopYandexMarket', 'Полное наименование компании, владеющей магазином. Не публикуется, используется для внутренней идентификации.'),
@@ -400,6 +404,11 @@ class ExportShopYandexMarketHandler extends ExportHandler
             ]);
 
             echo $form->field($this, 'is_params')->listBox(
+                \Yii::$app->formatter->booleanFormat, [
+                'size' => 1,
+            ]);
+
+            echo $form->field($this, 'is_second_images')->listBox(
                 \Yii::$app->formatter->booleanFormat, [
                 'size' => 1,
             ]);
@@ -766,6 +775,7 @@ class ExportShopYandexMarketHandler extends ExportHandler
     protected function _initOffer($xoffers, ShopCmsContentElement $element)
     {
 
+
         if (!$element->shopProduct) {
             throw new Exception("Нет данных для магазина");
         }
@@ -807,9 +817,18 @@ class ExportShopYandexMarketHandler extends ExportHandler
         $xoffer->appendChild(new \DOMElement('url', htmlspecialchars($element->absoluteUrl)));
         $xoffer->appendChild(new \DOMElement('name', $name));
         $xoffer->appendChild(new \DOMElement('model', $name));
+
         $xoffer->appendChild(new \DOMElement('picture', htmlspecialchars($element->mainProductImage->absoluteSrc)));
 
-        
+
+        if ($this->is_second_images) {
+            if ($element->images) {
+                foreach ($element->images as $image)
+                {
+                    $xoffer->appendChild(new \DOMElement('picture', htmlspecialchars($image->absoluteSrc)));
+                }
+            }
+        }
 
         if ($element->tree_id) {
             $xoffer->appendChild(new \DOMElement('categoryId', $element->tree_id));
@@ -821,8 +840,14 @@ class ExportShopYandexMarketHandler extends ExportHandler
 
         if ($element->shopProduct->minProductPrice) {
             $money = $element->shopProduct->minProductPrice->money;
+            $baseMoney = $element->shopProduct->baseProductPrice->money;
+
             $xoffer->appendChild(new \DOMElement('price', $money->getValue()));
             $xoffer->appendChild(new \DOMElement('currencyId', $money->getCurrency()->getCurrencyCode()));
+
+            if ((float)$baseMoney->amount > (float) $money->amount) {
+                $xoffer->appendChild(new \DOMElement('oldprice', $baseMoney->getValue()));
+            }
         }
 
         $shopProduct = $element->shopProduct;
