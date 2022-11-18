@@ -19,7 +19,6 @@ use skeeks\cms\models\CmsContentProperty;
 use skeeks\cms\models\CmsTree;
 use skeeks\cms\modules\admin\widgets\BlockTitleWidget;
 use skeeks\cms\money\models\MoneyCurrency;
-use skeeks\cms\relatedProperties\models\RelatedPropertyModel;
 use skeeks\cms\relatedProperties\PropertyType;
 use skeeks\cms\relatedProperties\propertyTypes\PropertyTypeList;
 use skeeks\cms\shop\models\ShopCmsContentElement;
@@ -60,6 +59,11 @@ class ExportShopYandexMarketHandler extends ExportHandler
      * @var null базовый путь сайта
      */
     public $base_url = null;
+
+    /**
+     * @var null в ссылках на товары использовать этот домен
+     */
+    public $base_host = null;
     /**
      * @var string путь к результирующему файлу
      */
@@ -182,6 +186,8 @@ class ExportShopYandexMarketHandler extends ExportHandler
             ['is_params', 'integer'],
             ['is_second_images', 'integer'],
 
+            ['base_host', 'string'],
+
             ['base_url', 'required'],
             ['base_url', 'url'],
 
@@ -210,24 +216,25 @@ class ExportShopYandexMarketHandler extends ExportHandler
     public function attributeLabels()
     {
         return ArrayHelper::merge(parent::attributeLabels(), [
-            'content_id'    => \Yii::t('skeeks/exportShopYandexMarket', 'Контент'),
-            'tree_id'       => \Yii::t('skeeks/exportShopYandexMarket', 'Выгружаемые категории'),
-            'base_url'      => \Yii::t('skeeks/exportShopYandexMarket', 'Базовый url'),
-            'is_barcodes'   => "Выгружать штрихкоды?",
-            'is_weight'     => "Выгружать вес?",
-            'is_description'     => "Выгружать описание?",
-            'is_params'     => "Выгружать характеристики?",
-            'is_second_images'     => "Выгружать дополнительныее изображения?",
-            'is_dimensions' => "Выгружать габариты (длина, ширина, высота)?",
+            'content_id'        => \Yii::t('skeeks/exportShopYandexMarket', 'Контент'),
+            'tree_id'           => \Yii::t('skeeks/exportShopYandexMarket', 'Выгружаемые категории'),
+            'base_url'          => \Yii::t('skeeks/exportShopYandexMarket', 'Базовый url'),
+            'base_host'         => \Yii::t('skeeks/exportShopYandexMarket', 'Базовый домен'),
+            'is_barcodes'       => "Выгружать штрихкоды?",
+            'is_weight'         => "Выгружать вес?",
+            'is_description'    => "Выгружать описание?",
+            'is_params'         => "Выгружать характеристики?",
+            'is_second_images'  => "Выгружать дополнительныее изображения?",
+            'is_dimensions'     => "Выгружать габариты (длина, ширина, высота)?",
             'filter_price_from' => "Розничная цена (от)",
-            'filter_price_to' => "Розничная цена (до)",
-            'is_count' => "Передавать количество товаров?",
-            'country_of_origin'        => "Страна производства товара",
-            'vendor'        => \Yii::t('skeeks/exportShopYandexMarket', 'Производитель или бренд'),
-            'vendor_code'   => \Yii::t('skeeks/exportShopYandexMarket', 'Артикул производителя'),
-            'shop_name'     => \Yii::t('skeeks/exportShopYandexMarket', 'Короткое название магазина'),
-            'shop_email'    => \Yii::t('skeeks/exportShopYandexMarket', 'Email магазина'),
-            'shop_company'  => \Yii::t('skeeks/exportShopYandexMarket', 'Полное наименование компании, владеющей магазином'),
+            'filter_price_to'   => "Розничная цена (до)",
+            'is_count'          => "Передавать количество товаров?",
+            'country_of_origin' => "Страна производства товара",
+            'vendor'            => \Yii::t('skeeks/exportShopYandexMarket', 'Производитель или бренд'),
+            'vendor_code'       => \Yii::t('skeeks/exportShopYandexMarket', 'Артикул производителя'),
+            'shop_name'         => \Yii::t('skeeks/exportShopYandexMarket', 'Короткое название магазина'),
+            'shop_email'        => \Yii::t('skeeks/exportShopYandexMarket', 'Email магазина'),
+            'shop_company'      => \Yii::t('skeeks/exportShopYandexMarket', 'Полное наименование компании, владеющей магазином'),
 
             'default_sales_notes' => \Yii::t('skeeks/exportShopYandexMarket', 'вариантах оплаты, описания акций и распродаж '),
             'default_delivery'    => \Yii::t('skeeks/exportShopYandexMarket', 'Возможность курьерской доставки'),
@@ -243,20 +250,21 @@ class ExportShopYandexMarketHandler extends ExportHandler
     public function attributeHints()
     {
         return ArrayHelper::merge(parent::attributeHints(), [
-            'country_of_origin'      => "Страна производства товара. Информацию необходимо указывать по закону. Если поле будет не заполнено, товар может быть скрыт с витрины. Список стран, которые могут быть указаны в этом элементе: http://partner.market.yandex.ru/pages/help/Countries.pdf.",
-            'is_barcodes'      => "Штрикоды товара будут выгружены, толкьо если они заданы у товара",
-            'is_weight'        => "Вес товара будет выгружен, только если он задан у товара",
-            'is_description'        => "Описание товара будет выгружено, только если оно задано у товара",
-            'filter_price_from'        => "Выгружать товары только от этой цены",
-            'filter_price_to'        => "Выгружать товары только до этой цены",
-            'is_dimensions'    => "Габариты товара будут выгружены только если они заданы у товара",
-            'is_second_images'    => "Главное изображение товара выгружается в любом случае. С этой опцией есть возможность выгрузить все фото товара.",
-            'shop_name'        => \Yii::t('skeeks/exportShopYandexMarket', 'Короткое название магазина, должно содержать не более 20 символов. В названии нельзя использовать слова, не имеющие отношения к наименованию магазина, например «лучший», «дешевый», указывать номер телефона и т. п.
+            'base_host'         => "Если в ссылках нужно указать другой домен, например используется для регионов",
+            'country_of_origin' => "Страна производства товара. Информацию необходимо указывать по закону. Если поле будет не заполнено, товар может быть скрыт с витрины. Список стран, которые могут быть указаны в этом элементе: http://partner.market.yandex.ru/pages/help/Countries.pdf.",
+            'is_barcodes'       => "Штрикоды товара будут выгружены, толкьо если они заданы у товара",
+            'is_weight'         => "Вес товара будет выгружен, только если он задан у товара",
+            'is_description'    => "Описание товара будет выгружено, только если оно задано у товара",
+            'filter_price_from' => "Выгружать товары только от этой цены",
+            'filter_price_to'   => "Выгружать товары только до этой цены",
+            'is_dimensions'     => "Габариты товара будут выгружены только если они заданы у товара",
+            'is_second_images'  => "Главное изображение товара выгружается в любом случае. С этой опцией есть возможность выгрузить все фото товара.",
+            'shop_name'         => \Yii::t('skeeks/exportShopYandexMarket', 'Короткое название магазина, должно содержать не более 20 символов. В названии нельзя использовать слова, не имеющие отношения к наименованию магазина, например «лучший», «дешевый», указывать номер телефона и т. п.
 Название магазина должно совпадать с фактическим названием магазина, которое публикуется на сайте. При несоблюдении данного требования наименование может быть изменено Яндекс.Маркетом самостоятельно без уведомления магазина.'),
-            'shop_company'     => \Yii::t('skeeks/exportShopYandexMarket', 'Полное наименование компании, владеющей магазином. Не публикуется, используется для внутренней идентификации.'),
-            'default_delivery' => \Yii::t('skeeks/exportShopYandexMarket', 'Для всех товаров магазина, по умолчанию'),
-            'default_pickup'   => \Yii::t('skeeks/exportShopYandexMarket', 'Для всех товаров магазина, по умолчанию'),
-            'default_store'    => \Yii::t('skeeks/exportShopYandexMarket', 'Для всех товаров магазина, по умолчанию'),
+            'shop_company'      => \Yii::t('skeeks/exportShopYandexMarket', 'Полное наименование компании, владеющей магазином. Не публикуется, используется для внутренней идентификации.'),
+            'default_delivery'  => \Yii::t('skeeks/exportShopYandexMarket', 'Для всех товаров магазина, по умолчанию'),
+            'default_pickup'    => \Yii::t('skeeks/exportShopYandexMarket', 'Для всех товаров магазина, по умолчанию'),
+            'default_store'     => \Yii::t('skeeks/exportShopYandexMarket', 'Для всех товаров магазина, по умолчанию'),
 
             'shop_store_ids' => \Yii::t('skeeks/exportShopYandexMarket', 'Товары которые в наличии на этих складах будут добавляться в файл'),
 
@@ -279,6 +287,7 @@ class ExportShopYandexMarketHandler extends ExportHandler
         ]);
 
         echo $form->field($this, 'base_url');
+        echo $form->field($this, 'base_host');
         echo $form->field($this, 'shop_name');
         echo $form->field($this, 'shop_email');
         echo $form->field($this, 'shop_company');
@@ -289,7 +298,7 @@ class ExportShopYandexMarketHandler extends ExportHandler
                     'id' => \yii\helpers\ArrayHelper::map(\skeeks\cms\shop\models\ShopContent::find()->all(), 'content_id', 'content_id'),
                 ]);
             })), [
-            'size'             => 1,
+            'size' => 1,
             //'data-form-reload' => 'true',
         ]);
 
@@ -301,184 +310,183 @@ class ExportShopYandexMarketHandler extends ExportHandler
             ]
         );
 
-            echo BlockTitleWidget::widget([
-                'content' => 'Настройки данных товаров',
-            ]);
+        echo BlockTitleWidget::widget([
+            'content' => 'Настройки данных товаров',
+        ]);
 
 
-            echo $form->field($this, 'default_delivery')->listBox(
-                ArrayHelper::merge(['' => ' - '], \Yii::$app->cms->booleanFormat()), [
-                'size' => 1,
-            ]);
+        echo $form->field($this, 'default_delivery')->listBox(
+            ArrayHelper::merge(['' => ' - '], \Yii::$app->cms->booleanFormat()), [
+            'size' => 1,
+        ]);
 
-            echo $form->field($this, 'default_pickup')->listBox(
-                ArrayHelper::merge(['' => ' - '], \Yii::$app->cms->booleanFormat()), [
-                'size' => 1,
-            ]);
+        echo $form->field($this, 'default_pickup')->listBox(
+            ArrayHelper::merge(['' => ' - '], \Yii::$app->cms->booleanFormat()), [
+            'size' => 1,
+        ]);
 
-            echo $form->field($this, 'default_store')->listBox(
-                ArrayHelper::merge(['' => ' - '], \Yii::$app->cms->booleanFormat()), [
-                'size' => 1,
-            ]);
+        echo $form->field($this, 'default_store')->listBox(
+            ArrayHelper::merge(['' => ' - '], \Yii::$app->cms->booleanFormat()), [
+            'size' => 1,
+        ]);
 
-            echo $form->field($this, 'default_sales_notes')->textInput([
-                'maxlength' => 50,
-            ]);
+        echo $form->field($this, 'default_sales_notes')->textInput([
+            'maxlength' => 50,
+        ]);
 
-            echo BlockTitleWidget::widget([
-                'content' => 'Какие данные будут выгружены по товару?',
-            ]);
-
-
-            echo $form->field($this, 'vendor')->listBox(
-                ArrayHelper::merge(['' => ' - '],
-                    ArrayHelper::map(
-                        CmsContentProperty::find()->cmsSite()->andWhere([
-                            'property_type' => [PropertyType::CODE_LIST, PropertyType::CODE_ELEMENT]
-                        ])->all(),
-                        function($model) {
-                            return "property.{$model->code}";
-                        },
-                        'name'
-                    )
-                ), [
-                'size' => 1,
-            ]);
+        echo BlockTitleWidget::widget([
+            'content' => 'Какие данные будут выгружены по товару?',
+        ]);
 
 
-            echo $form->field($this, 'vendor_code')->listBox(
-                ArrayHelper::merge(['' => ' - '],
-                    ArrayHelper::map(
-                        CmsContentProperty::find()->cmsSite()->andWhere([
-                            'property_type' => [PropertyType::CODE_STRING]
-                        ])->all(),
-                        function($model) {
-                            return "property.{$model->code}";
-                        },
-                        'name'
-                    )
-                ), [
-                'size' => 1,
-            ]);
-            
-            
-            echo $form->field($this, 'country_of_origin')->listBox(
-                ArrayHelper::merge(['' => ' - '],
-                    ArrayHelper::map(
-                        CmsContentProperty::find()->cmsSite()->andWhere([
-                            'property_type' => [PropertyType::CODE_LIST, PropertyType::CODE_ELEMENT]
-                        ])->all(),
-                        function($model) {
-                            return "property.{$model->code}";
-                        },
-                        'name'
-                    )
-                ), [
-                'size' => 1,
-            ]);
-
-            echo $form->field($this, 'is_barcodes')->listBox(
-                \Yii::$app->formatter->booleanFormat, [
-                'size' => 1,
-            ]);
-
-            echo $form->field($this, 'is_weight')->listBox(
-                \Yii::$app->formatter->booleanFormat, [
-                'size' => 1,
-            ]);
-            echo $form->field($this, 'is_dimensions')->listBox(
-                \Yii::$app->formatter->booleanFormat, [
-                'size' => 1,
-            ]);
+        echo $form->field($this, 'vendor')->listBox(
+            ArrayHelper::merge(['' => ' - '],
+                ArrayHelper::map(
+                    CmsContentProperty::find()->cmsSite()->andWhere([
+                        'property_type' => [PropertyType::CODE_LIST, PropertyType::CODE_ELEMENT],
+                    ])->all(),
+                    function ($model) {
+                        return "property.{$model->code}";
+                    },
+                    'name'
+                )
+            ), [
+            'size' => 1,
+        ]);
 
 
-            echo $form->field($this, 'is_count')->listBox(
-                \Yii::$app->formatter->booleanFormat, [
-                'size' => 1,
-            ]);
+        echo $form->field($this, 'vendor_code')->listBox(
+            ArrayHelper::merge(['' => ' - '],
+                ArrayHelper::map(
+                    CmsContentProperty::find()->cmsSite()->andWhere([
+                        'property_type' => [PropertyType::CODE_STRING],
+                    ])->all(),
+                    function ($model) {
+                        return "property.{$model->code}";
+                    },
+                    'name'
+                )
+            ), [
+            'size' => 1,
+        ]);
 
 
-            echo $form->field($this, 'is_description')->listBox(
-                \Yii::$app->formatter->booleanFormat, [
-                'size' => 1,
-            ]);
+        echo $form->field($this, 'country_of_origin')->listBox(
+            ArrayHelper::merge(['' => ' - '],
+                ArrayHelper::map(
+                    CmsContentProperty::find()->cmsSite()->andWhere([
+                        'property_type' => [PropertyType::CODE_LIST, PropertyType::CODE_ELEMENT],
+                    ])->all(),
+                    function ($model) {
+                        return "property.{$model->code}";
+                    },
+                    'name'
+                )
+            ), [
+            'size' => 1,
+        ]);
 
-            echo $form->field($this, 'is_params')->listBox(
-                \Yii::$app->formatter->booleanFormat, [
-                'size' => 1,
-            ]);
+        echo $form->field($this, 'is_barcodes')->listBox(
+            \Yii::$app->formatter->booleanFormat, [
+            'size' => 1,
+        ]);
 
-            echo $form->field($this, 'is_second_images')->listBox(
-                \Yii::$app->formatter->booleanFormat, [
-                'size' => 1,
-            ]);
+        echo $form->field($this, 'is_weight')->listBox(
+            \Yii::$app->formatter->booleanFormat, [
+            'size' => 1,
+        ]);
+        echo $form->field($this, 'is_dimensions')->listBox(
+            \Yii::$app->formatter->booleanFormat, [
+            'size' => 1,
+        ]);
 
-            
-            echo BlockTitleWidget::widget([
-                'content' => 'Фильтрация',
-            ]);
 
-            echo Alert::widget([
-                'options' => [
-                    'class' => 'alert-info',
-                ],
-                'body'    => 'В выгрузку попадают только активные товары и предложения. Дополнительно можно ограничить выборку опциями ниже.',
-            ]);
+        echo $form->field($this, 'is_count')->listBox(
+            \Yii::$app->formatter->booleanFormat, [
+            'size' => 1,
+        ]);
 
-            echo $form->field($this, 'shop_store_ids')->widget(
-                Chosen::class,
-                [
-                    'items'    => ArrayHelper::map(ShopStore::find()->cmsSite()->all(), 'id', 'asText'),
-                    'multiple' => true,
-                ]
-            );
 
-            echo '
+        echo $form->field($this, 'is_description')->listBox(
+            \Yii::$app->formatter->booleanFormat, [
+            'size' => 1,
+        ]);
+
+        echo $form->field($this, 'is_params')->listBox(
+            \Yii::$app->formatter->booleanFormat, [
+            'size' => 1,
+        ]);
+
+        echo $form->field($this, 'is_second_images')->listBox(
+            \Yii::$app->formatter->booleanFormat, [
+            'size' => 1,
+        ]);
+
+
+        echo BlockTitleWidget::widget([
+            'content' => 'Фильтрация',
+        ]);
+
+        echo Alert::widget([
+            'options' => [
+                'class' => 'alert-info',
+            ],
+            'body'    => 'В выгрузку попадают только активные товары и предложения. Дополнительно можно ограничить выборку опциями ниже.',
+        ]);
+
+        echo $form->field($this, 'shop_store_ids')->widget(
+            Chosen::class,
+            [
+                'items'    => ArrayHelper::map(ShopStore::find()->cmsSite()->all(), 'id', 'asText'),
+                'multiple' => true,
+            ]
+        );
+
+        echo '
 <div class="row">
 
     <div class="col-md-4 col-12">
     ';
-      echo $form->field($this, 'filter_price_from')->input('number');
-                    echo '
+        echo $form->field($this, 'filter_price_from')->input('number');
+        echo '
     </div>
     <div class="col-md-4 col-12">
     ';
-      echo $form->field($this, 'filter_price_to')->input('number');
-                    echo '
+        echo $form->field($this, 'filter_price_to')->input('number');
+        echo '
     </div>
 
 </div>
 ';
 
 
+        echo $form->field($this, 'filter_property')->listBox(
+            ArrayHelper::merge(['' => ' - '], $this->getAvailableFields()), [
+            'size'             => 1,
+            'data-form-reload' => 'true',
+        ]);
 
-            echo $form->field($this, 'filter_property')->listBox(
-                ArrayHelper::merge(['' => ' - '], $this->getAvailableFields()), [
-                'size'             => 1,
-                'data-form-reload' => 'true',
-            ]);
+        if ($this->filter_property) {
+            if ($propertyName = $this->getRelatedPropertyName($this->filter_property)) {
+                $element = new CmsContentElement([
+                    'content_id' => $this->cmsContent->id,
+                ]);
 
-            if ($this->filter_property) {
-                if ($propertyName = $this->getRelatedPropertyName($this->filter_property)) {
-                    $element = new CmsContentElement([
-                        'content_id' => $this->cmsContent->id,
-                    ]);
-
-                    if ($property = $element->relatedPropertiesModel->getRelatedProperty($propertyName)) {
-                        if ($property->handler instanceof PropertyTypeList) {
-                            echo $form->field($this, 'filter_property_value')->listBox(
-                                ArrayHelper::merge(['' => ' - '], ArrayHelper::map($property->enums, 'id', 'value')), [
-                                'size' => 1,
-                            ]);
-                        } else {
-                            echo $form->field($this, 'filter_property_value');
-                        }
+                if ($property = $element->relatedPropertiesModel->getRelatedProperty($propertyName)) {
+                    if ($property->handler instanceof PropertyTypeList) {
+                        echo $form->field($this, 'filter_property_value')->listBox(
+                            ArrayHelper::merge(['' => ' - '], ArrayHelper::map($property->enums, 'id', 'value')), [
+                            'size' => 1,
+                        ]);
                     } else {
                         echo $form->field($this, 'filter_property_value');
                     }
+                } else {
+                    echo $form->field($this, 'filter_property_value');
                 }
-
             }
+
+        }
 
 
     }
@@ -642,7 +650,6 @@ class ExportShopYandexMarketHandler extends ExportHandler
     protected function _appendOffers(\DOMElement $shop)
     {
         $query = ShopCmsContentElement::find()
-
             ->active()
             ->cmsSite()
             ->innerJoinWith('shopProduct as shopProduct')
@@ -659,7 +666,7 @@ class ExportShopYandexMarketHandler extends ExportHandler
             ->groupBy(ShopCmsContentElement::tableName().".id");
 
         $query->select([
-            ShopCmsContentElement::tableName() . ".*"
+            ShopCmsContentElement::tableName().".*",
         ]);
 
         $defaultTypePrice = \Yii::$app->skeeks->site->getShopTypePrices()->andWhere(['is_default' => 1])->one();
@@ -677,17 +684,21 @@ class ExportShopYandexMarketHandler extends ExportHandler
 
             if ($this->filter_price_from) {
                 $query->andHaving([
-                    '>=', 'retail_price_filter',  (float) $this->filter_price_from
+                    '>=',
+                    'retail_price_filter',
+                    (float)$this->filter_price_from,
                 ]);
             }
             if ($this->filter_price_to) {
                 $query->andHaving([
-                    '<=', 'retail_price_filter',  (float) $this->filter_price_to
+                    '<=',
+                    'retail_price_filter',
+                    (float)$this->filter_price_to,
                 ]);
             }
 
         }
-        
+
         if ($this->shop_store_ids) {
 
             $subQuery = ShopStoreProduct::find()->select(["quantity" => new Expression("sum(quantity)")])->andWhere(
@@ -814,7 +825,16 @@ class ExportShopYandexMarketHandler extends ExportHandler
         }*/
 
         $name = htmlspecialchars($element->productName);
-        $xoffer->appendChild(new \DOMElement('url', htmlspecialchars($element->absoluteUrl)));
+
+        $url = $element->absoluteUrl;
+        if ($this->base_host) {
+            $urlData = parse_url($url);
+            $urlData['host'] = $this->base_host;
+            $url = $this->unparse_url($urlData);
+        }
+
+        $xoffer->appendChild(new \DOMElement('url', htmlspecialchars($url)));
+
         $xoffer->appendChild(new \DOMElement('name', $name));
         $xoffer->appendChild(new \DOMElement('model', $name));
 
@@ -823,8 +843,7 @@ class ExportShopYandexMarketHandler extends ExportHandler
 
         if ($this->is_second_images) {
             if ($element->images) {
-                foreach ($element->images as $image)
-                {
+                foreach ($element->images as $image) {
                     $xoffer->appendChild(new \DOMElement('picture', htmlspecialchars($image->absoluteSrc)));
                 }
             }
@@ -845,7 +864,7 @@ class ExportShopYandexMarketHandler extends ExportHandler
             $xoffer->appendChild(new \DOMElement('price', $money->getValue()));
             $xoffer->appendChild(new \DOMElement('currencyId', $money->getCurrency()->getCurrencyCode()));
 
-            if ((float)$baseMoney->amount > (float) $money->amount) {
+            if ((float)$baseMoney->amount > (float)$money->amount) {
                 $xoffer->appendChild(new \DOMElement('oldprice', $baseMoney->getValue()));
             }
         }
@@ -887,10 +906,6 @@ class ExportShopYandexMarketHandler extends ExportHandler
         }
 
 
-
-        
-
-        
         /**
          * @see https://yandex.ru/support/partnermarket/offers.html
          * Габариты товара (длина, ширина, высота) в упаковке. Размеры укажите в сантиметрах.
@@ -926,7 +941,6 @@ class ExportShopYandexMarketHandler extends ExportHandler
             }
         }
 
-        
 
         if ($this->vendor_code) {
             if ($propertyName = $this->getElementName($this->vendor_code)) {
@@ -942,8 +956,8 @@ class ExportShopYandexMarketHandler extends ExportHandler
 
 
         }
-        
-        
+
+
         if ($this->country_of_origin) {
             if ($propertyName = $this->getRelatedPropertyName($this->country_of_origin)) {
                 if ($element->relatedPropertiesModel) {
@@ -1001,31 +1015,28 @@ class ExportShopYandexMarketHandler extends ExportHandler
             /**
              * @link https://yandex.ru/support/marketplace/assortment/auto/yml.html#offers
              */
-            $xoffer->appendChild(new \DOMElement('count', (int) $element->raw_row['quantity']));
+            $xoffer->appendChild(new \DOMElement('count', (int)$element->raw_row['quantity']));
         }
 
 
         if ($this->is_params) {
             $rp = $element->relatedPropertiesModel;
             $rp->initAllProperties();
-            foreach ($rp->toArray() as $code => $value)
-            {
+            foreach ($rp->toArray() as $code => $value) {
                 if ($value) {
                     $property = $rp->getRelatedProperty($code);
 
-                    
 
                     if ($property->property_type == PropertyType::CODE_NUMBER) {
                         $xParam = new \DOMElement('param', $rp->getAttributeAsText($code));
                         $xoffer->appendChild($xParam);
                         $xParam->setAttribute('name', $property->name);
                         $xParam->setAttribute('unit', $property->cmsMeasure->symbol);
-                    }  elseif ($property->property_type == PropertyType::CODE_LIST) {
+                    } elseif ($property->property_type == PropertyType::CODE_LIST) {
                         if ($property->is_multiple) {
                             $data = $property->getEnums()->andWhere(['id' => $value])->select(['code', 'value'])->limit(10)->asArray()->all();
                             if ($data) {
-                                foreach ($data as $key => $row)
-                                {
+                                foreach ($data as $key => $row) {
                                     $xParam = new \DOMElement('param', ArrayHelper::getValue($row, 'value'));
                                     $xoffer->appendChild($xParam);
                                     $xParam->setAttribute('name', $property->name);
@@ -1043,9 +1054,21 @@ class ExportShopYandexMarketHandler extends ExportHandler
         }
 
 
-
-
         return $xoffer;
+    }
+
+    public function unparse_url($parsed_url)
+    {
+        $scheme = isset($parsed_url['scheme']) ? $parsed_url['scheme'].'://' : '';
+        $host = isset($parsed_url['host']) ? $parsed_url['host'] : '';
+        $port = isset($parsed_url['port']) ? ':'.$parsed_url['port'] : '';
+        $user = isset($parsed_url['user']) ? $parsed_url['user'] : '';
+        $pass = isset($parsed_url['pass']) ? ':'.$parsed_url['pass'] : '';
+        $pass = ($user || $pass) ? "$pass@" : '';
+        $path = isset($parsed_url['path']) ? $parsed_url['path'] : '';
+        $query = isset($parsed_url['query']) ? '?'.$parsed_url['query'] : '';
+        $fragment = isset($parsed_url['fragment']) ? '#'.$parsed_url['fragment'] : '';
+        return "$scheme$user$pass$host$port$path$query$fragment";
     }
 
     /**
@@ -1055,13 +1078,13 @@ class ExportShopYandexMarketHandler extends ExportHandler
     public function getIso8601Time($hours)
     {
         if ($hours >= 8640) {
-            $total = round($hours/8640);
+            $total = round($hours / 8640);
             return "P{$total}Y0M0DT0H";
-        } elseif($hours >= 720) {
-            $total = round($hours/720);
+        } elseif ($hours >= 720) {
+            $total = round($hours / 720);
             return "P0Y{$total}M0DT0H";
         } elseif ($hours >= 24) {
-            $total = round($hours/720);
+            $total = round($hours / 720);
             return "P0Y0M{$total}DT0H";
         } else {
             return "P0Y0M0DT{$hours}H";
