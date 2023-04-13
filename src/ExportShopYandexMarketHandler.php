@@ -26,6 +26,7 @@ use skeeks\cms\shop\models\ShopProduct;
 use skeeks\cms\shop\models\ShopProductPrice;
 use skeeks\cms\shop\models\ShopStore;
 use skeeks\cms\shop\models\ShopStoreProduct;
+use skeeks\cms\widgets\AjaxSelectModel;
 use skeeks\modules\cms\money\models\Currency;
 use skeeks\widget\chosen\Chosen;
 use yii\base\Exception;
@@ -86,6 +87,10 @@ class ExportShopYandexMarketHandler extends ExportHandler
      * @var
      */
     public $shop_store_ids;
+    /**
+     * @var
+     */
+    public $disable_brand_ids;
 
 
     /**
@@ -209,6 +214,7 @@ class ExportShopYandexMarketHandler extends ExportHandler
             ['filter_property', 'string'],
             ['filter_property_value', 'string'],
 
+            ['disable_brand_ids', 'safe'],
             ['shop_store_ids', 'safe'],
         ]);
     }
@@ -244,7 +250,8 @@ class ExportShopYandexMarketHandler extends ExportHandler
             'filter_property'       => \Yii::t('skeeks/exportShopYandexMarket', 'Признак выгрузки'),
             'filter_property_value' => \Yii::t('skeeks/exportShopYandexMarket', 'Значение'),
 
-            'shop_store_ids' => \Yii::t('skeeks/exportShopYandexMarket', 'Склады/Поставщики/Магазины'),
+            'shop_store_ids'    => \Yii::t('skeeks/exportShopYandexMarket', 'Склады/Поставщики/Магазины'),
+            'disable_brand_ids' => \Yii::t('skeeks/exportShopYandexMarket', 'Отключить бренды'),
         ]);
     }
     public function attributeHints()
@@ -265,8 +272,10 @@ class ExportShopYandexMarketHandler extends ExportHandler
             'default_delivery'  => \Yii::t('skeeks/exportShopYandexMarket', 'Для всех товаров магазина, по умолчанию'),
             'default_pickup'    => \Yii::t('skeeks/exportShopYandexMarket', 'Для всех товаров магазина, по умолчанию'),
             'default_store'     => \Yii::t('skeeks/exportShopYandexMarket', 'Для всех товаров магазина, по умолчанию'),
+            'filter_property'   => "Товары у которых заполнена выбранная характеристика будут выгружены в маркет",
 
-            'shop_store_ids' => \Yii::t('skeeks/exportShopYandexMarket', 'Товары которые в наличии на этих складах будут добавляться в файл'),
+            'shop_store_ids'    => \Yii::t('skeeks/exportShopYandexMarket', 'Товары которые в наличии на этих складах будут добавляться в файл'),
+            'disable_brand_ids' => \Yii::t('skeeks/exportShopYandexMarket', 'Выберите бренды которые не нужно выгружать в эту выгрузку.'),
 
             'default_sales_notes' => \Yii::t('skeeks/exportShopYandexMarket', 'Элемент используется для отражения информации о:
  минимальной сумме заказа, минимальной партии товара, необходимости предоплаты (указание элемента обязательно);
@@ -442,6 +451,7 @@ class ExportShopYandexMarketHandler extends ExportHandler
             ]
         );
 
+
         echo '
 <div class="row">
 
@@ -486,6 +496,33 @@ class ExportShopYandexMarketHandler extends ExportHandler
                 }
             }
 
+        }
+
+
+        $content_id = null;
+        $cmsContentProperty = \skeeks\cms\models\CmsContentProperty::find()->cmsSite()->andWhere(['is_vendor' => 1])->one();
+        if ($cmsContentProperty) {
+            $handler = $cmsContentProperty->handler;
+            if ($handler instanceof \skeeks\cms\relatedProperties\propertyTypes\PropertyTypeElement) {
+                $content_id = $handler->content_id;
+            }
+        }
+
+        if ($content_id) {
+            echo $form->field($this, 'disable_brand_ids')->widget(
+                AjaxSelectModel::class,
+                [
+                    'modelClass'  => CmsContentElement::class,
+                    'multiple'    => true,
+                    'searchQuery' => function ($word = '') use ($content_id) {
+                        $query = CmsContentElement::find()->cmsSite()->andWhere(['content_id' => $content_id]);
+                        if ($word) {
+                            $query->search($word);
+                        }
+                        return $query;
+                    },
+                ]
+            );
         }
 
 
@@ -783,6 +820,21 @@ class ExportShopYandexMarketHandler extends ExportHandler
         }
     }
 
+    protected $_brandProperty = false;
+
+    /**
+     * @return CmsContentProperty|null
+     */
+    public function getBrandProperty()
+    {
+        if ($this->_brandProperty === false) {
+            $this->_brandProperty = \skeeks\cms\models\CmsContentProperty::find()->cmsSite()->andWhere(['is_vendor' => 1])->one();
+        }
+
+        return $this->_brandProperty;
+
+    }
+
     protected function _initOffer($xoffers, ShopCmsContentElement $element)
     {
 
@@ -806,6 +858,18 @@ class ExportShopYandexMarketHandler extends ExportHandler
             if ($attributeValue != $this->filter_property_value) {
                 throw new Exception("Не найдено свойство для фильтрации");
             }
+        }
+
+
+        if ($this->disable_brand_ids) {
+
+            $content_id = null;
+            $cmsContentProperty = $this->brandProperty;
+            $brandId = $element->relatedPropertiesModel->getAttribute($cmsContentProperty->code);
+            if (in_array($brandId, $this->disable_brand_ids)) {
+                throw new Exception("Нельзя добавлять товары этого бренда");
+            }
+
         }
 
         $this->result->stdout("\t{$element->id}\n");
@@ -1052,6 +1116,8 @@ class ExportShopYandexMarketHandler extends ExportHandler
 
             }
         }
+
+
 
 
         return $xoffer;
