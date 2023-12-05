@@ -1106,9 +1106,16 @@ class ExportShopYandexMarketHandler extends ExportHandler
                                     $xParam->setAttribute('name', $property->name);
                                 }
                             }
+                        } else {
+                            $xParam = new \DOMElement('param', $rp->getAttributeAsText($code));
+                            $xoffer->appendChild($xParam);
+                            $xParam->setAttribute('name', $property->name);
                         }
                     } else {
-                        $xParam = new \DOMElement('param', $rp->getAttributeAsText($code));
+                        $text = $rp->getAttributeAsText($code);
+                        $text = str_replace("&ndash;", "—", $text);
+
+                        $xParam = new \DOMElement('param', $text);
                         $xoffer->appendChild($xParam);
                         $xParam->setAttribute('name', $property->name);
                     }
