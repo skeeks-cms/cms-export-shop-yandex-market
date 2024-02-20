@@ -302,11 +302,7 @@ class ExportShopYandexMarketHandler extends ExportHandler
         echo $form->field($this, 'shop_company');
 
         echo $form->field($this, 'content_id')->listBox(
-            array_merge(['' => ' - '], CmsContent::getDataForSelect(true, function (ActiveQuery $activeQuery) {
-                $activeQuery->andWhere([
-                    'id' => \yii\helpers\ArrayHelper::map(\skeeks\cms\shop\models\ShopContent::find()->all(), 'content_id', 'content_id'),
-                ]);
-            })), [
+            [\Yii::$app->shop->contentProducts->id => \Yii::$app->shop->contentProducts->name], [
             'size' => 1,
             //'data-form-reload' => 'true',
         ]);
@@ -1123,8 +1119,6 @@ class ExportShopYandexMarketHandler extends ExportHandler
 
             }
         }
-
-
 
 
         return $xoffer;
