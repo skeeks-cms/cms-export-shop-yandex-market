@@ -21,6 +21,7 @@ use skeeks\cms\modules\admin\widgets\BlockTitleWidget;
 use skeeks\cms\money\models\MoneyCurrency;
 use skeeks\cms\relatedProperties\PropertyType;
 use skeeks\cms\relatedProperties\propertyTypes\PropertyTypeList;
+use skeeks\cms\shop\models\ShopBrand;
 use skeeks\cms\shop\models\ShopCmsContentElement;
 use skeeks\cms\shop\models\ShopProduct;
 use skeeks\cms\shop\models\ShopProductPrice;
@@ -344,7 +345,7 @@ class ExportShopYandexMarketHandler extends ExportHandler
         ]);
 
 
-        echo $form->field($this, 'vendor')->listBox(
+        /*echo $form->field($this, 'vendor')->listBox(
             ArrayHelper::merge(['' => ' - '],
                 ArrayHelper::map(
                     CmsContentProperty::find()->cmsSite()->andWhere([
@@ -389,7 +390,7 @@ class ExportShopYandexMarketHandler extends ExportHandler
                 )
             ), [
             'size' => 1,
-        ]);
+        ]);*/
 
         echo $form->field($this, 'is_barcodes')->listBox(
             \Yii::$app->formatter->booleanFormat, [
@@ -495,7 +496,7 @@ class ExportShopYandexMarketHandler extends ExportHandler
         }
 
 
-        $content_id = null;
+        /*$content_id = null;
         $cmsContentProperty = \skeeks\cms\models\CmsContentProperty::find()->cmsSite()->andWhere(['is_vendor' => 1])->one();
         if ($cmsContentProperty) {
             $handler = $cmsContentProperty->handler;
@@ -504,14 +505,14 @@ class ExportShopYandexMarketHandler extends ExportHandler
             }
         }
 
-        if ($content_id) {
+        if ($content_id) {*/
             echo $form->field($this, 'disable_brand_ids')->widget(
                 AjaxSelectModel::class,
                 [
-                    'modelClass'  => CmsContentElement::class,
+                    'modelClass'  => ShopBrand::class,
                     'multiple'    => true,
-                    'searchQuery' => function ($word = '') use ($content_id) {
-                        $query = CmsContentElement::find()->cmsSite()->andWhere(['content_id' => $content_id]);
+                    'searchQuery' => function ($word = '') {
+                        $query = ShopBrand::find();
                         if ($word) {
                             $query->search($word);
                         }
@@ -519,7 +520,7 @@ class ExportShopYandexMarketHandler extends ExportHandler
                     },
                 ]
             );
-        }
+        /*}*/
 
 
     }
@@ -747,6 +748,10 @@ class ExportShopYandexMarketHandler extends ExportHandler
                 ->andWhere(['>', 'shopStoreProducts.quantity', 0]);
         }
 
+        if ($this->disable_brand_ids) {
+            $query->andWhere(['not in', 'shopProduct.brand_id', $this->disable_brand_ids]);
+        }
+
         /*$totalCount = $query->count();
 
         $this->result->stdout("\tВсего товаров: {$totalCount}\n");
@@ -816,20 +821,6 @@ class ExportShopYandexMarketHandler extends ExportHandler
         }
     }
 
-    protected $_brandProperty = false;
-
-    /**
-     * @return CmsContentProperty|null
-     */
-    public function getBrandProperty()
-    {
-        if ($this->_brandProperty === false) {
-            $this->_brandProperty = \skeeks\cms\models\CmsContentProperty::find()->cmsSite()->andWhere(['is_vendor' => 1])->one();
-        }
-
-        return $this->_brandProperty;
-
-    }
 
     protected function _initOffer($xoffers, ShopCmsContentElement $element)
     {
@@ -856,17 +847,6 @@ class ExportShopYandexMarketHandler extends ExportHandler
             }
         }
 
-
-        if ($this->disable_brand_ids) {
-
-            $content_id = null;
-            $cmsContentProperty = $this->brandProperty;
-            $brandId = $element->relatedPropertiesModel->getAttribute($cmsContentProperty->code);
-            if (in_array($brandId, $this->disable_brand_ids)) {
-                throw new Exception("Нельзя добавлять товары этого бренда");
-            }
-
-        }
 
         $this->result->stdout("\t{$element->id}\n");
 
@@ -983,58 +963,16 @@ class ExportShopYandexMarketHandler extends ExportHandler
         }
 
 
-        if ($this->vendor) {
-            if ($propertyName = $this->getRelatedPropertyName($this->vendor)) {
-                if ($element->relatedPropertiesModel) {
-                    if ($value = $element->relatedPropertiesModel->getAttribute($propertyName)) {
-                        $smartName = $element->relatedPropertiesModel->getSmartAttribute($propertyName);
-                        $xoffer->appendChild(new \DOMElement('vendor', $smartName));
-                    } else {
-                        if ($element->parent_content_element_id) {
-                            if ($value = $element->parentContentElement->relatedPropertiesModel->getAttribute($propertyName)) {
-                                $smartName = $element->parentContentElement->relatedPropertiesModel->getSmartAttribute($propertyName);
-                                $xoffer->appendChild(new \DOMElement('vendor', $smartName));
-                            }
-                        }
-                    }
-                }
-            }
+        if ($element->shopProduct->brand_id) {
+            $xoffer->appendChild(new \DOMElement('vendor', $element->shopProduct->brand->name));
+        }
+        if ($element->shopProduct->brand_sku) {
+            $xoffer->appendChild(new \DOMElement('vendorCode', $element->shopProduct->brand_sku));
+        }
+        if ($element->shopProduct->country_alpha2) {
+            $xoffer->appendChild(new \DOMElement('country_of_origin', $element->shopProduct->country->name));
         }
 
-
-        if ($this->vendor_code) {
-            if ($propertyName = $this->getElementName($this->vendor_code)) {
-                $xoffer->appendChild(new \DOMElement('vendorCode', $element->$propertyName));
-            } else if ($propertyName = $this->getRelatedPropertyName($this->vendor_code)) {
-                if ($element->relatedPropertiesModel) {
-                    if ($value = $element->relatedPropertiesModel->getAttribute($propertyName)) {
-                        $smartName = $element->relatedPropertiesModel->getSmartAttribute($propertyName);
-                        $xoffer->appendChild(new \DOMElement('vendorCode', $smartName));
-                    }
-                }
-            }
-
-
-        }
-
-
-        if ($this->country_of_origin) {
-            if ($propertyName = $this->getRelatedPropertyName($this->country_of_origin)) {
-                if ($element->relatedPropertiesModel) {
-                    if ($value = $element->relatedPropertiesModel->getAttribute($propertyName)) {
-                        $smartName = $element->relatedPropertiesModel->getSmartAttribute($propertyName);
-                        $xoffer->appendChild(new \DOMElement('country_of_origin', $smartName));
-                    } else {
-                        if ($element->parent_content_element_id) {
-                            if ($value = $element->parentContentElement->relatedPropertiesModel->getAttribute($propertyName)) {
-                                $smartName = $element->parentContentElement->relatedPropertiesModel->getSmartAttribute($propertyName);
-                                $xoffer->appendChild(new \DOMElement('country_of_origin', $smartName));
-                            }
-                        }
-                    }
-                }
-            }
-        }
 
         if ($this->default_delivery) {
             if ($this->default_delivery == 'Y') {
