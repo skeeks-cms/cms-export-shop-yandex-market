@@ -666,7 +666,8 @@ class ExportShopYandexMarketHandler extends ExportHandler
             foreach ($trees as $tree) {
                 /*$xcategories->appendChild($this->__xml->importNode($cat->toXML()->documentElement, TRUE));*/
 
-                $xcurr = $xcategories->appendChild(new \DOMElement('category', $tree->name));
+                //echo htmlspecialchars($tree->name) . "\n";
+                $xcurr = $xcategories->appendChild(new \DOMElement('category', htmlspecialchars($tree->name)));
                 $xcurr->appendChild(new \DOMAttr('id', $tree->id));
                 if ($tree->parent && $tree->id != $rootTree->id) {
                     $xcurr->appendChild(new \DOMAttr('parentId', $tree->parent->id));
