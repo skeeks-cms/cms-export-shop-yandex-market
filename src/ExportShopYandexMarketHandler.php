@@ -899,8 +899,15 @@ class ExportShopYandexMarketHandler extends ExportHandler
         }
 
         if ($element->shopProduct->minProductPrice) {
+
             $money = $element->shopProduct->minProductPrice->money;
             $baseMoney = $element->shopProduct->baseProductPrice->money;
+
+            //Если указано минимальное количество продажи
+            if ($element->shopProduct->measure_ratio_min) {
+                $money->multiply($element->shopProduct->measure_ratio_min);
+                $baseMoney->multiply($element->shopProduct->measure_ratio_min);
+            }
 
             $xoffer->appendChild(new \DOMElement('price', $money->getValue()));
             $xoffer->appendChild(new \DOMElement('currencyId', $money->getCurrency()->getCurrencyCode()));
