@@ -27,6 +27,7 @@ use skeeks\cms\shop\models\ShopProduct;
 use skeeks\cms\shop\models\ShopProductPrice;
 use skeeks\cms\shop\models\ShopStore;
 use skeeks\cms\shop\models\ShopStoreProduct;
+use skeeks\cms\shop\models\ShopTypePrice;
 use skeeks\cms\widgets\AjaxSelectModel;
 use skeeks\modules\cms\money\models\Currency;
 use skeeks\widget\chosen\Chosen;
@@ -92,6 +93,11 @@ class ExportShopYandexMarketHandler extends ExportHandler
      * @var
      */
     public $disable_brand_ids;
+
+    /**
+     * @var Выгружаемая цена
+     */
+    public $type_price_id;
 
 
     /**
@@ -215,6 +221,7 @@ class ExportShopYandexMarketHandler extends ExportHandler
             ['filter_property', 'string'],
             ['filter_property_value', 'string'],
 
+            ['type_price_id', 'integer'],
             ['disable_brand_ids', 'safe'],
             ['shop_store_ids', 'safe'],
         ]);
@@ -253,6 +260,7 @@ class ExportShopYandexMarketHandler extends ExportHandler
 
             'shop_store_ids'    => \Yii::t('skeeks/exportShopYandexMarket', 'Склады/Поставщики/Магазины'),
             'disable_brand_ids' => \Yii::t('skeeks/exportShopYandexMarket', 'Отключить бренды'),
+            'type_price_id' => \Yii::t('skeeks/exportShopYandexMarket', 'Выгружаемая цена'),
         ]);
     }
     public function attributeHints()
@@ -277,6 +285,7 @@ class ExportShopYandexMarketHandler extends ExportHandler
 
             'shop_store_ids'    => \Yii::t('skeeks/exportShopYandexMarket', 'Товары которые в наличии на этих складах будут добавляться в файл'),
             'disable_brand_ids' => \Yii::t('skeeks/exportShopYandexMarket', 'Выберите бренды которые не нужно выгружать в эту выгрузку.'),
+            'type_price_id' => \Yii::t('skeeks/exportShopYandexMarket', 'Если не будет указана выгружаемая цена, то выгрузится розничная цена по умолчанию.'),
 
             'default_sales_notes' => \Yii::t('skeeks/exportShopYandexMarket', 'Элемент используется для отражения информации о:
  минимальной сумме заказа, минимальной партии товара, необходимости предоплаты (указание элемента обязательно);
@@ -391,6 +400,21 @@ class ExportShopYandexMarketHandler extends ExportHandler
             ), [
             'size' => 1,
         ]);*/
+
+        echo $form->field($this, 'type_price_id')->widget(
+            AjaxSelectModel::class,
+            [
+                'modelClass'  => ShopTypePrice::class,
+                'multiple'    => false,
+                'searchQuery' => function ($word = '') {
+                    $query = ShopTypePrice::find();
+                    if ($word) {
+                        $query->search($word);
+                    }
+                    return $query;
+                },
+            ]
+        );
 
         echo $form->field($this, 'is_barcodes')->listBox(
             \Yii::$app->formatter->booleanFormat, [
@@ -520,6 +544,8 @@ class ExportShopYandexMarketHandler extends ExportHandler
                     },
                 ]
             );
+
+
         /*}*/
 
 
@@ -704,7 +730,12 @@ class ExportShopYandexMarketHandler extends ExportHandler
             ShopCmsContentElement::tableName().".*",
         ]);
 
-        $defaultTypePrice = \Yii::$app->skeeks->site->getShopTypePrices()->andWhere(['is_default' => 1])->one();
+        if ($this->type_price_id) {
+            $defaultTypePrice = \Yii::$app->skeeks->site->getShopTypePrices()->andWhere(['id' => $this->type_price_id])->one();
+        } else {
+            $defaultTypePrice = \Yii::$app->skeeks->site->getShopTypePrices()->andWhere(['is_default' => 1])->one();
+        }
+
 
         if ($this->filter_price_from || $this->filter_price_to) {
 
@@ -898,24 +929,42 @@ class ExportShopYandexMarketHandler extends ExportHandler
             $xoffer->appendChild(new \DOMElement('adult', 'true'));
         }
 
-        if ($element->shopProduct->minProductPrice) {
+        if ($this->type_price_id) {
 
-            $money = $element->shopProduct->minProductPrice->money;
-            $baseMoney = $element->shopProduct->baseProductPrice->money;
+            if ($price = $element->shopProduct->getPrice($this->type_price_id)) {
 
-            //Если указано минимальное количество продажи
-            if ($element->shopProduct->measure_ratio_min) {
-                $money->multiply($element->shopProduct->measure_ratio_min);
-                $baseMoney->multiply($element->shopProduct->measure_ratio_min);
+                $money = $price->money;
+
+                //Если указано минимальное количество продажи
+                if ($element->shopProduct->measure_ratio_min) {
+                    $money->multiply($element->shopProduct->measure_ratio_min);
+                }
+
+                $xoffer->appendChild(new \DOMElement('price', $money->getValue()));
+                $xoffer->appendChild(new \DOMElement('currencyId', $money->getCurrency()->getCurrencyCode()));
             }
 
-            $xoffer->appendChild(new \DOMElement('price', $money->getValue()));
-            $xoffer->appendChild(new \DOMElement('currencyId', $money->getCurrency()->getCurrencyCode()));
+        } else {
+            if ($element->shopProduct->minProductPrice) {
 
-            if ((float)$baseMoney->amount > (float)$money->amount) {
-                $xoffer->appendChild(new \DOMElement('oldprice', $baseMoney->getValue()));
+                $money = $element->shopProduct->minProductPrice->money;
+                $baseMoney = $element->shopProduct->baseProductPrice->money;
+
+                //Если указано минимальное количество продажи
+                if ($element->shopProduct->measure_ratio_min) {
+                    $money->multiply($element->shopProduct->measure_ratio_min);
+                    $baseMoney->multiply($element->shopProduct->measure_ratio_min);
+                }
+
+                $xoffer->appendChild(new \DOMElement('price', $money->getValue()));
+                $xoffer->appendChild(new \DOMElement('currencyId', $money->getCurrency()->getCurrencyCode()));
+
+                if ((float)$baseMoney->amount > (float)$money->amount) {
+                    $xoffer->appendChild(new \DOMElement('oldprice', $baseMoney->getValue()));
+                }
             }
         }
+
 
         $shopProduct = $element->shopProduct;
 
