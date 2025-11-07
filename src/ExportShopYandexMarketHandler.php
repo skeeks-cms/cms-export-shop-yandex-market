@@ -905,6 +905,10 @@ class ExportShopYandexMarketHandler extends ExportHandler
             $url = $this->unparse_url($urlData);
         }
 
+        /*if (!\Yii::$app->urlManager->hostInfo) {
+            \Yii::$app->urlManager->hostInfo = $this->base_host;
+        }*/
+
         $xoffer->appendChild(new \DOMElement('url', htmlspecialchars($url)));
 
         $xoffer->appendChild(new \DOMElement('name', $name));
