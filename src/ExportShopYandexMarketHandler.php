@@ -99,6 +99,11 @@ class ExportShopYandexMarketHandler extends ExportHandler
      */
     public $type_price_id;
 
+    /**
+     * @var <repricingMin> — Минимальная возможная цена товара (МВЦ) —  данный тег нужен для обозначения вашей минимальной цены на товар. Рекомендуемая цена рассчитанная с помощью формулы репрайсинга, не может быть меньше чем МВЦ.
+     */
+    public $repricing_min_type_price_id;
+
 
     /**
      * @var string
@@ -222,6 +227,7 @@ class ExportShopYandexMarketHandler extends ExportHandler
             ['filter_property_value', 'string'],
 
             ['type_price_id', 'integer'],
+            ['repricing_min_type_price_id', 'integer'],
             ['disable_brand_ids', 'safe'],
             ['shop_store_ids', 'safe'],
         ]);
@@ -261,6 +267,7 @@ class ExportShopYandexMarketHandler extends ExportHandler
             'shop_store_ids'    => \Yii::t('skeeks/exportShopYandexMarket', 'Склады/Поставщики/Магазины'),
             'disable_brand_ids' => \Yii::t('skeeks/exportShopYandexMarket', 'Отключить бренды'),
             'type_price_id' => \Yii::t('skeeks/exportShopYandexMarket', 'Выгружаемая цена'),
+            'repricing_min_type_price_id' => \Yii::t('skeeks/exportShopYandexMarket', 'Минимальная возможная цена товара (МВЦ) '),
         ]);
     }
     public function attributeHints()
@@ -286,6 +293,7 @@ class ExportShopYandexMarketHandler extends ExportHandler
             'shop_store_ids'    => \Yii::t('skeeks/exportShopYandexMarket', 'Товары которые в наличии на этих складах будут добавляться в файл'),
             'disable_brand_ids' => \Yii::t('skeeks/exportShopYandexMarket', 'Выберите бренды которые не нужно выгружать в эту выгрузку.'),
             'type_price_id' => \Yii::t('skeeks/exportShopYandexMarket', 'Если не будет указана выгружаемая цена, то выгрузится розничная цена по умолчанию.'),
+            'repricing_min_type_price_id' => \Yii::t('skeeks/exportShopYandexMarket', 'repricingMin — Минимальная возможная цена товара (МВЦ) —  данный тег нужен для обозначения вашей минимальной цены на товар. Рекомендуемая цена рассчитанная с помощью формулы репрайсинга, не может быть меньше чем МВЦ.'),
 
             'default_sales_notes' => \Yii::t('skeeks/exportShopYandexMarket', 'Элемент используется для отражения информации о:
  минимальной сумме заказа, минимальной партии товара, необходимости предоплаты (указание элемента обязательно);
@@ -402,6 +410,21 @@ class ExportShopYandexMarketHandler extends ExportHandler
         ]);*/
 
         echo $form->field($this, 'type_price_id')->widget(
+            AjaxSelectModel::class,
+            [
+                'modelClass'  => ShopTypePrice::class,
+                'multiple'    => false,
+                'searchQuery' => function ($word = '') {
+                    $query = ShopTypePrice::find();
+                    if ($word) {
+                        $query->search($word);
+                    }
+                    return $query;
+                },
+            ]
+        );
+
+        echo $form->field($this, 'repricing_min_type_price_id')->widget(
             AjaxSelectModel::class,
             [
                 'modelClass'  => ShopTypePrice::class,
@@ -966,6 +989,20 @@ class ExportShopYandexMarketHandler extends ExportHandler
                 if ((float)$baseMoney->amount > (float)$money->amount) {
                     $xoffer->appendChild(new \DOMElement('oldprice', $baseMoney->getValue()));
                 }
+            }
+        }
+
+        if ($this->repricing_min_type_price_id) {
+            if ($priceRepricing = $element->shopProduct->getPrice($this->repricing_min_type_price_id)) {
+
+                $money = $priceRepricing->money;
+
+                //Если указано минимальное количество продажи
+                if ($element->shopProduct->measure_ratio_min) {
+                    $money->multiply($element->shopProduct->measure_ratio_min);
+                }
+
+                $xoffer->appendChild(new \DOMElement('repricingMin', $money->getValue()));
             }
         }
 
