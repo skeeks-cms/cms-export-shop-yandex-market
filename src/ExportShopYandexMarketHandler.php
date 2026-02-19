@@ -618,12 +618,26 @@ class ExportShopYandexMarketHandler extends ExportHandler
         return '';
     }
 
+    private $_base_memory_usage = 0;
+
+    /**
+     * @return string
+     */
+    protected function _memoryUsage()
+    {
+        return \Yii::$app->formatter->asShortSize(memory_get_usage() - $this->_base_memory_usage);
+    }
+    
     public function export()
     {
+        \Yii::$app->db->enableLogging = false;
+        \Yii::$app->db->enableProfiling = false;
 
         //TODO: if console app
         /*\Yii::$app->urlManager->baseUrl = $this->base_url;
         \Yii::$app->urlManager->scriptUrl = $this->base_url;*/
+        
+        $this->_base_memory_usage = memory_get_usage();
 
         ini_set("memory_limit", "8192M");
         set_time_limit(0);
@@ -663,6 +677,9 @@ class ExportShopYandexMarketHandler extends ExportHandler
 
         $this->_appendCurrencies($shop);
         $this->_appendCategories($shop);
+        
+        /*$this->result->stdout("before _appendOffers [{$this->_memoryUsage()}]\n");*/
+
         $this->_appendOffers($shop);
 
         $xml->formatOutput = true;
@@ -738,7 +755,7 @@ class ExportShopYandexMarketHandler extends ExportHandler
             ->cmsSite()
             ->innerJoinWith('shopProduct as shopProduct')
             ->joinWith('shopProduct.shopStoreProducts as shopStoreProducts')
-            ->where(['content_id' => $this->content_id])
+            ->andWhere(['content_id' => $this->content_id])
             ->andWhere([
                 'in',
                 'shopProduct.product_type',
@@ -747,11 +764,16 @@ class ExportShopYandexMarketHandler extends ExportHandler
                     ShopProduct::TYPE_OFFER,
                 ],
             ])
+            ->with([
+                'shopProduct',
+                'shopProduct.shopStoreProducts',
+            ])
             ->groupBy(ShopCmsContentElement::tableName().".id");
 
         $query->select([
             ShopCmsContentElement::tableName().".*",
         ]);
+
 
         if ($this->type_price_id) {
             $defaultTypePrice = \Yii::$app->skeeks->site->getShopTypePrices()->andWhere(['id' => $this->type_price_id])->one();
@@ -824,7 +846,6 @@ class ExportShopYandexMarketHandler extends ExportHandler
             $trees = ArrayHelper::merge([$rootTree], $trees);
             $query->andWhere(['tree_id' => ArrayHelper::map($trees, 'id', 'id')]);
         }
-
         $totalCount = $query->count();
         $this->result->stdout("\tВсего товаров: {$totalCount}\n");
 
@@ -834,6 +855,8 @@ class ExportShopYandexMarketHandler extends ExportHandler
             /**
              * @var ShopCmsContentElement $element
              */
+
+
             foreach ($query->each(10) as $element) {
                 try {
                     if (!$element->shopProduct) {
@@ -862,6 +885,7 @@ class ExportShopYandexMarketHandler extends ExportHandler
 
 
                     $this->_initOffer($xoffers, $element);
+
 
                     $successAdded++;
                 } catch (\Exception $e) {
@@ -903,7 +927,7 @@ class ExportShopYandexMarketHandler extends ExportHandler
         }
 
 
-        $this->result->stdout("\t{$element->id}\n");
+        $this->result->stdout("\t{$element->id} [{$this->_memoryUsage()}]\n");
 
         $xoffer = $xoffers->appendChild(new \DOMElement('offer'));
         $xoffer->appendChild(new \DOMAttr('id', $element->id));
