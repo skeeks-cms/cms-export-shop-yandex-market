@@ -139,6 +139,8 @@ class ExportShopYandexMarketHandler extends ExportHandler
     public $is_count = 0;
     public $is_params = 0;
     public $is_second_images = 0;
+    
+    public $is_measure_ratio_min = 1;
 
 
     public $filter_property = '';
@@ -201,6 +203,7 @@ class ExportShopYandexMarketHandler extends ExportHandler
             ['is_weight', 'integer'],
             ['is_description', 'integer'],
             ['is_params', 'integer'],
+            ['is_measure_ratio_min', 'integer'],
             ['is_second_images', 'integer'],
 
             ['base_host', 'string'],
@@ -244,6 +247,7 @@ class ExportShopYandexMarketHandler extends ExportHandler
             'is_weight'         => "Выгружать вес?",
             'is_description'    => "Выгружать описание?",
             'is_params'         => "Выгружать характеристики?",
+            'is_measure_ratio_min'         => "Учитывать минимальное количество продажи?",
             'is_second_images'  => "Выгружать дополнительныее изображения?",
             'is_dimensions'     => "Выгружать габариты (длина, ширина, высота)?",
             'filter_price_from' => "Розничная цена (от)",
@@ -293,6 +297,7 @@ class ExportShopYandexMarketHandler extends ExportHandler
             'shop_store_ids'    => \Yii::t('skeeks/exportShopYandexMarket', 'Товары которые в наличии на этих складах будут добавляться в файл'),
             'disable_brand_ids' => \Yii::t('skeeks/exportShopYandexMarket', 'Выберите бренды которые не нужно выгружать в эту выгрузку.'),
             'type_price_id' => \Yii::t('skeeks/exportShopYandexMarket', 'Если не будет указана выгружаемая цена, то выгрузится розничная цена по умолчанию.'),
+            'is_measure_ratio_min' => 'Если выбрано да, то цена будет выгружаться не за единицу товара, а за минимальное его количество доступное к покупке.',
             'repricing_min_type_price_id' => \Yii::t('skeeks/exportShopYandexMarket', 'repricingMin — Минимальная возможная цена товара (МВЦ) —  данный тег нужен для обозначения вашей минимальной цены на товар. Рекомендуемая цена рассчитанная с помощью формулы репрайсинга, не может быть меньше чем МВЦ.'),
 
             'default_sales_notes' => \Yii::t('skeeks/exportShopYandexMarket', 'Элемент используется для отражения информации о:
@@ -471,6 +476,11 @@ class ExportShopYandexMarketHandler extends ExportHandler
         ]);
 
         echo $form->field($this, 'is_second_images')->listBox(
+            \Yii::$app->formatter->booleanFormat, [
+            'size' => 1,
+        ]);
+
+        echo $form->field($this, 'is_measure_ratio_min')->listBox(
             \Yii::$app->formatter->booleanFormat, [
             'size' => 1,
         ]);
@@ -986,10 +996,13 @@ class ExportShopYandexMarketHandler extends ExportHandler
 
                 $money = $price->money;
 
-                //Если указано минимальное количество продажи
-                if ($element->shopProduct->measure_ratio_min) {
-                    $money->multiply($element->shopProduct->measure_ratio_min);
+                //Если указано минимальное количество продажи и включена настройка учитывать этот параметр
+                if ($this->is_measure_ratio_min) {
+                    if ($element->shopProduct->measure_ratio_min) {
+                        $money->multiply($element->shopProduct->measure_ratio_min);
+                    }
                 }
+                
 
                 $xoffer->appendChild(new \DOMElement('price', $money->getValue()));
                 $xoffer->appendChild(new \DOMElement('currencyId', $money->getCurrency()->getCurrencyCode()));
