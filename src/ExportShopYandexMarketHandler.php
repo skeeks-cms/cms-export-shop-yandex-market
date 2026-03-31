@@ -997,7 +997,8 @@ class ExportShopYandexMarketHandler extends ExportHandler
                 $money = $price->money;
 
                 //Если указано минимальное количество продажи и включена настройка учитывать этот параметр
-                if ($this->is_measure_ratio_min) {
+                
+                if ($this->is_measure_ratio_min == 1) {
                     if ($element->shopProduct->measure_ratio_min) {
                         $money->multiply($element->shopProduct->measure_ratio_min);
                     }
@@ -1009,16 +1010,20 @@ class ExportShopYandexMarketHandler extends ExportHandler
             }
 
         } else {
+            
             if ($element->shopProduct->minProductPrice) {
 
                 $money = $element->shopProduct->minProductPrice->money;
                 $baseMoney = $element->shopProduct->baseProductPrice->money;
 
                 //Если указано минимальное количество продажи
-                if ($element->shopProduct->measure_ratio_min) {
-                    $money->multiply($element->shopProduct->measure_ratio_min);
-                    $baseMoney->multiply($element->shopProduct->measure_ratio_min);
+                if ($this->is_measure_ratio_min == 1) {
+                    if ($element->shopProduct->measure_ratio_min) {
+                        $money->multiply($element->shopProduct->measure_ratio_min);
+                        $baseMoney->multiply($element->shopProduct->measure_ratio_min);
+                    }
                 }
+                
 
                 $xoffer->appendChild(new \DOMElement('price', $money->getValue()));
                 $xoffer->appendChild(new \DOMElement('currencyId', $money->getCurrency()->getCurrencyCode()));
