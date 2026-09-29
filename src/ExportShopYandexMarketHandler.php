@@ -693,7 +693,18 @@ class ExportShopYandexMarketHandler extends ExportHandler
         $this->_appendOffers($shop);
 
         $xml->formatOutput = true;
-        $xml->save($this->rootFilePath);
+        $this->result->checkpoint();
+        // Publish only a complete file, preserving the previous feed on failure.
+        $temporary = tempnam(dirname($this->rootFilePath), '.export-');
+        if ($temporary === false) { throw new Exception('Не удалось создать временный файл экспорта.'); }
+        try {
+            if ($xml->save($temporary) === false) { throw new Exception('Не удалось записать файл экспорта.'); }
+            $this->result->checkpoint();
+            chmod($temporary, 0644);
+            if (!rename($temporary, $this->rootFilePath)) { throw new Exception('Не удалось опубликовать файл экспорта.'); }
+        } finally {
+            if (is_file($temporary)) { unlink($temporary); }
+        }
 
         return $this->result;
     }
@@ -858,6 +869,7 @@ class ExportShopYandexMarketHandler extends ExportHandler
         }
         $totalCount = $query->count();
         $this->result->stdout("\tВсего товаров: {$totalCount}\n");
+        $this->result->setTotal($totalCount);
 
         if ($totalCount) {
             $successAdded = 0;
@@ -868,6 +880,8 @@ class ExportShopYandexMarketHandler extends ExportHandler
 
 
             foreach ($query->each(10) as $element) {
+                $this->result->checkpoint();
+                $itemError = null;
                 try {
                     if (!$element->shopProduct) {
                         throw new Exception("Нет данных для магазина");
@@ -899,11 +913,13 @@ class ExportShopYandexMarketHandler extends ExportHandler
 
                     $successAdded++;
                 } catch (\Exception $e) {
+                    if ($e instanceof \skeeks\cms\job\exceptions\JobException) { throw $e; }
                     //echo VarDumper::dumpAsString($e, 3);
 
                     $this->result->stdout("\t\t{$element->id} — {$e->getMessage()}\n", Console::FG_RED);
-                    continue;
+                    $itemError = $e->getMessage();
                 }
+                $this->result->itemFinished($element->id, $itemError);
             }
 
             $this->result->stdout("\tДобавлено в файл: {$successAdded}\n");
