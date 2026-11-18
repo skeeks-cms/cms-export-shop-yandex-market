@@ -43,6 +43,11 @@ class ExportShopGoogleMerchantHandler extends ExportShopYandexMarketHandler
     public $condition = 'new';
 
     /**
+     * @var string наличие товаров без остатка: in_stock — как на странице товара (купить можно), out_of_stock — по остаткам
+     */
+    public $zero_stock_availability = 'in_stock';
+
+    /**
      * @var string категория Google по умолчанию (g:google_product_category): номер или путь из таксономии Google
      */
     public $google_product_category = '';
@@ -69,6 +74,7 @@ class ExportShopGoogleMerchantHandler extends ExportShopYandexMarketHandler
         return ArrayHelper::merge(parent::rules(), [
             ['condition', 'in', 'range' => array_keys(self::CONDITIONS)],
             ['google_product_category', 'string', 'max' => 750],
+            ['zero_stock_availability', 'in', 'range' => ['in_stock', 'out_of_stock']],
         ]);
     }
 
@@ -81,6 +87,7 @@ class ExportShopGoogleMerchantHandler extends ExportShopYandexMarketHandler
             'is_second_images'        => 'Выгружать дополнительные изображения?',
             'condition'               => 'Состояние товаров',
             'google_product_category' => 'Категория Google',
+            'zero_stock_availability' => 'Товары без остатка',
         ]);
     }
 
@@ -92,6 +99,7 @@ class ExportShopGoogleMerchantHandler extends ExportShopYandexMarketHandler
             'is_second_images'        => 'Главное фото выгружается всегда, дополнительных — не больше 10.',
             'is_measure_ratio_min'    => 'Цена в фиде должна совпадать с ценой на странице товара. Если на сайте цена указана за м² или штуку, а продаётся упаковкой, проверьте, какую цену видит покупатель.',
             'condition'               => 'Для новых товаров поле необязательно, для б/у и восстановленных — обязательно.',
+            'zero_stock_availability' => 'Google сверяет наличие в фиде со страницей товара. Если такие товары на сайте можно купить (под заказ), оставьте «В наличии». «Нет в наличии» — только если на сайте их купить нельзя. Убрать товары без остатка из фида можно фильтром «Количество больше» ниже.',
             'google_product_category' => 'Необязательно. Номер категории из справочника Google, например 2047. Если пусто, Google определит категорию сам.',
         ]);
     }
@@ -126,6 +134,10 @@ class ExportShopGoogleMerchantHandler extends ExportShopYandexMarketHandler
         ]);
 
         echo $form->field($this, 'condition')->listBox(self::CONDITIONS, ['size' => 1]);
+        echo $form->field($this, 'zero_stock_availability')->listBox([
+            'in_stock'     => 'В наличии (как на странице товара)',
+            'out_of_stock' => 'Нет в наличии',
+        ], ['size' => 1]);
         echo $form->field($this, 'google_product_category');
 
         foreach (['is_measure_ratio_min', 'is_description', 'is_second_images', 'is_barcodes', 'is_weight'] as $attribute) {
@@ -349,24 +361,29 @@ class ExportShopGoogleMerchantHandler extends ExportShopYandexMarketHandler
 
     /**
      * Наличие по остаткам складов: выбранных в фильтре, иначе всех складов товара.
-     * Если товар на складах не учитывается, он считается в наличии, как в фиде Яндекса.
+     * Товар без складских записей — в наличии; с нулевым остатком — по настройке
+     * zero_stock_availability (по умолчанию «в наличии», как в разметке страницы товара).
      */
     protected function getAvailability(ShopCmsContentElement $element)
     {
         $row = (array)$element->raw_row;
         if (array_key_exists('export_stock_quantity', $row) && $row['export_stock_quantity'] !== null) {
-            return (float)$row['export_stock_quantity'] > 0 ? 'in_stock' : 'out_of_stock';
+            $quantity = (float)$row['export_stock_quantity'];
+        } else {
+            $storeProducts = $element->shopProduct->shopStoreProducts;
+            if (!$storeProducts) {
+                return 'in_stock';
+            }
+            $quantity = 0;
+            foreach ($storeProducts as $storeProduct) {
+                $quantity += (float)$storeProduct->quantity;
+            }
         }
 
-        $storeProducts = $element->shopProduct->shopStoreProducts;
-        if (!$storeProducts) {
+        if ($quantity > 0) {
             return 'in_stock';
         }
-        $quantity = 0;
-        foreach ($storeProducts as $storeProduct) {
-            $quantity += (float)$storeProduct->quantity;
-        }
-        return $quantity > 0 ? 'in_stock' : 'out_of_stock';
+        return $this->zero_stock_availability === 'out_of_stock' ? 'out_of_stock' : 'in_stock';
     }
 
     /**
@@ -431,7 +448,8 @@ class ExportShopGoogleMerchantHandler extends ExportShopYandexMarketHandler
     }
 
     /**
-     * Цепочка разделов «Плитка > Керамогранит» от выгружаемого раздела до раздела товара.
+     * Цепочка разделов «Плитка > Керамогранит» до раздела товара, без самого
+     * выгружаемого раздела («Каталог»); товар прямо в нём — его название.
      * @param int|null $treeId
      * @return string
      */
@@ -441,6 +459,9 @@ class ExportShopGoogleMerchantHandler extends ExportShopYandexMarketHandler
         while ($treeId && isset($this->_trees[$treeId]) && count($names) < 20) {
             array_unshift($names, $this->_trees[$treeId][0]);
             $treeId = $this->_trees[$treeId][1];
+        }
+        if (count($names) > 1) {
+            array_shift($names);
         }
         return implode(' > ', $names);
     }
