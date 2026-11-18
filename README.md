@@ -61,6 +61,33 @@ XML-текст экранируется один раз, включая брен
 SKEEKS_APP_ROOT=/app php vendor/skeeks/cms-export-shop-yandex-market/tests/yandex-export-regression.php
 ```
 
+Фид Google Merchant Center
+--------------------------
+
+Обработчик `ExportShopGoogleMerchantHandler` («[Xml] Экспорт товаров в Google
+Merchant Center») наследует выгрузку Яндекса: те же выборка, склады, пороги
+остатка, цены, бренды и признак выгрузки. Отличается формат: RSS 2.0 с полями
+`g:*` (https://support.google.com/merchants/answer/7052112).
+
+- `g:price` — «3153.60 RUB»; без выбранного типа цены при скидке базовая цена
+  идёт в `g:price`, сниженная — в `g:sale_price`. Минимальное количество
+  продажи учитывается так же, как у Яндекса.
+- `g:availability` — `in_stock`/`out_of_stock` по сумме остатков выбранных
+  складов (иначе всех складов товара); товар без складских записей — в наличии.
+- `g:description` — текст без HTML, до 5000 символов; без описания — название.
+  `g:title` — до 150 символов.
+- `g:gtin` — только штрихкоды GTIN-8/12/13/14 с верной контрольной цифрой;
+  `g:mpn` — `brand_sku`; без GTIN и пары бренд+артикул — `g:identifier_exists=no`.
+- `g:product_type` — цепочка разделов от выгружаемого раздела; `g:condition`
+  и `g:google_product_category` задаются в настройках задачи.
+
+В Merchant Center: «Добавить товары из файла» → «Ссылка на файл», указать URL
+файла задачи и расписание загрузки.
+
+```bash
+SKEEKS_APP_ROOT=/app php vendor/skeeks/cms-export-shop-yandex-market/tests/google-export-regression.php
+```
+
 При прямой выкладке обновлять также `cms-export` с методом
 `ExportResult::itemSkipped()` и его адаптером `ExportJobResult`.
 

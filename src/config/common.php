@@ -6,6 +6,9 @@ return [
                 'skeeks\cms\exportShopYandexMarket\ExportShopYandexMarketHandler' => [
                     'class' => 'skeeks\cms\exportShopYandexMarket\ExportShopYandexMarketHandler',
                 ],
+                'skeeks\cms\exportShopYandexMarket\ExportShopGoogleMerchantHandler' => [
+                    'class' => 'skeeks\cms\exportShopYandexMarket\ExportShopGoogleMerchantHandler',
+                ],
             ],
         ],
 

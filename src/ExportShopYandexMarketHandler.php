@@ -500,6 +500,15 @@ class ExportShopYandexMarketHandler extends ExportHandler
         ]);
 
 
+        $this->renderFilterFields($form);
+    }
+
+    /**
+     * Фильтры выборки товаров: общие для фидов Яндекса и Google.
+     * @param ActiveForm $form
+     */
+    protected function renderFilterFields(ActiveForm $form)
+    {
         echo BlockTitleWidget::widget([
             'content' => 'Фильтрация',
         ]);
@@ -597,8 +606,6 @@ class ExportShopYandexMarketHandler extends ExportHandler
 
 
         /*}*/
-
-
     }
 
 
@@ -707,9 +714,19 @@ class ExportShopYandexMarketHandler extends ExportHandler
 
         $this->_appendOffers($shop);
 
+        $this->saveDocument($xml);
+
+        return $this->result;
+    }
+
+    /**
+     * Publish only a complete file, preserving the previous feed on failure.
+     * @param \DOMDocument $xml
+     */
+    protected function saveDocument(\DOMDocument $xml)
+    {
         $xml->formatOutput = true;
         $this->result->checkpoint();
-        // Publish only a complete file, preserving the previous feed on failure.
         $temporary = tempnam(dirname($this->rootFilePath), '.export-');
         if ($temporary === false) { throw new Exception('Не удалось создать временный файл экспорта.'); }
         try {
@@ -720,8 +737,6 @@ class ExportShopYandexMarketHandler extends ExportHandler
         } finally {
             if (is_file($temporary)) { unlink($temporary); }
         }
-
-        return $this->result;
     }
 
     /**
@@ -903,7 +918,7 @@ class ExportShopYandexMarketHandler extends ExportHandler
 
         if ($totalCount) {
             $successAdded = 0;
-            $xoffers = $shop->appendChild($this->xmlElement('offers'));
+            $xoffers = $this->createOffersContainer($shop);
             /**
              * @var ShopCmsContentElement $element
              */
@@ -948,6 +963,16 @@ class ExportShopYandexMarketHandler extends ExportHandler
         }
     }
 
+
+    /**
+     * Элемент, в который добавляются товары фида.
+     * @param \DOMElement $shop
+     * @return \DOMElement
+     */
+    protected function createOffersContainer(\DOMElement $shop)
+    {
+        return $shop->appendChild($this->xmlElement('offers'));
+    }
 
     protected function _initOffer($xoffers, ShopCmsContentElement $element)
     {
