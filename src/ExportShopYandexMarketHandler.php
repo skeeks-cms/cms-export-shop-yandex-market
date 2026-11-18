@@ -1008,7 +1008,6 @@ class ExportShopYandexMarketHandler extends ExportHandler
         $xoffer->appendChild($this->xmlElement('url', $url));
 
         $xoffer->appendChild($this->xmlElement('name', $name));
-        $xoffer->appendChild($this->xmlElement('model', $name));
 
         $xoffer->appendChild($this->xmlElement('picture', $element->mainProductImage->absoluteSrc));
 

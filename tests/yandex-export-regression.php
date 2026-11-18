@@ -86,6 +86,11 @@ $offers = $document->appendChild(new DOMElement('offers'));
 $handler->offer($offers, $element);
 check($offers->childNodes->length === 1, 'Offer added without base price');
 check($offers->firstChild->getElementsByTagName('vendor')->item(0)->textContent === 'A & Co.', 'Brand ampersand exported');
+$offer = $offers->firstChild;
+check(!$offer->hasAttribute('type'), 'YML offer uses simple type');
+check($offer->getElementsByTagName('name')->item(0)->textContent === 'Tile & PO', 'YML offer keeps full name');
+check($offer->getElementsByTagName('model')->length === 0, 'YML offer omits duplicate model');
+
 $parsed = new DOMDocument();
 check($parsed->loadXML($document->saveXML()), 'Whole offer parseable');
 check($handler->skip($element) === null, 'Valid product accepted');
