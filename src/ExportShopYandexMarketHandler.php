@@ -1069,7 +1069,9 @@ class ExportShopYandexMarketHandler extends ExportHandler
                     }
                 }
 
-
+                if ($discountMoney) {
+                    $money->amount = $this->roundShownAmount($money->amount);
+                }
                 $xoffer->appendChild($this->xmlElement('price', $money->getValue()));
                 $xoffer->appendChild($this->xmlElement('currencyId', $money->getCurrency()->getCurrencyCode()));
 
@@ -1100,7 +1102,9 @@ class ExportShopYandexMarketHandler extends ExportHandler
                     }
                 }
 
-
+                if ($discountMoney) {
+                    $money->amount = $this->roundShownAmount($money->amount);
+                }
                 $xoffer->appendChild($this->xmlElement('price', $money->getValue()));
                 $xoffer->appendChild($this->xmlElement('currencyId', $money->getCurrency()->getCurrencyCode()));
 
@@ -1353,6 +1357,15 @@ class ExportShopYandexMarketHandler extends ExportHandler
         }
         $money->amount = (float)$money->amount;
         return $money;
+    }
+
+    /**
+     * Цена со скидкой может получиться с долями копейки (6064.325). Страница показывает её
+     * форматтером валют — 2 знака с банковским округлением (6 064,32); в фид уходит то же число.
+     */
+    protected function roundShownAmount($amount)
+    {
+        return round((float)$amount, 2, PHP_ROUND_HALF_EVEN);
     }
 
     /** @var array|null id складов сайта (свои и поставщиков), как на странице товара. */
