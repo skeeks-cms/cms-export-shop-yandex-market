@@ -24,7 +24,9 @@ use skeeks\cms\exportShopYandexMarket\widgets\StockQuantityFilterInput;
 use skeeks\cms\relatedProperties\PropertyType;
 use skeeks\cms\relatedProperties\propertyTypes\PropertyTypeList;
 use skeeks\cms\shop\models\ShopBrand;
+use skeeks\cms\rbac\CmsManager;
 use skeeks\cms\shop\models\ShopCmsContentElement;
+use skeeks\cms\shop\models\ShopDiscount;
 use skeeks\cms\shop\models\ShopProduct;
 use skeeks\cms\shop\models\ShopProductPrice;
 use skeeks\cms\shop\models\ShopStore;
@@ -1007,15 +1009,8 @@ class ExportShopYandexMarketHandler extends ExportHandler
         $xoffer->appendChild(new \DOMAttr('id', $element->id));
 
 
-        $xoffer->appendChild(new \DOMAttr('available', 'true'));
-
-        /*if ($element->shopProduct->quantity)
-        {
-            $xoffer->appendChild(new \DOMAttr('available', 'true'));
-        } else
-        {
-            throw new Exception("Нет в наличии");
-        }*/
+        //Наличие как на странице товара: без остатка там «Уведомить о поступлении», купить нельзя
+        $xoffer->appendChild(new \DOMAttr('available', $this->isAvailableOnSite($element) ? 'true' : 'false'));
 
         $name = $element->productName;
 
@@ -1058,41 +1053,63 @@ class ExportShopYandexMarketHandler extends ExportHandler
             if ($price = $element->shopProduct->getPrice($this->type_price_id)) {
 
                 $money = $price->money;
+                //Цена для любого посетителя сайта — со скидками магазина, как на странице товара
+                $discountMoney = $this->applyGuestDiscounts($element, $price);
+                $fullMoney = $discountMoney ? clone $money : null;
+                if ($discountMoney) {
+                    $money = $discountMoney;
+                }
 
                 //Если указано минимальное количество продажи и включена настройка учитывать этот параметр
-                
+
                 if ($this->is_measure_ratio_min == 1) {
                     if ($element->shopProduct->measure_ratio_min) {
                         $money->multiply($element->shopProduct->measure_ratio_min);
+                        if ($fullMoney) { $fullMoney->multiply($element->shopProduct->measure_ratio_min); }
                     }
                 }
-                
+
 
                 $xoffer->appendChild($this->xmlElement('price', $money->getValue()));
                 $xoffer->appendChild($this->xmlElement('currencyId', $money->getCurrency()->getCurrencyCode()));
+
+                if ($fullMoney && (float)$fullMoney->amount > (float)$money->amount) {
+                    $xoffer->appendChild($this->xmlElement('oldprice', $fullMoney->getValue()));
+                }
             }
 
         } else {
-            
+
             if ($element->shopProduct->minProductPrice) {
 
                 $money = $element->shopProduct->minProductPrice->money;
                 $baseMoney = $element->shopProduct->baseProductPrice ? $element->shopProduct->baseProductPrice->money : null;
+                //Цена для любого посетителя сайта — со скидками магазина, как на странице товара
+                $discountMoney = $this->applyGuestDiscounts($element, $element->shopProduct->minProductPrice);
+                $fullMoney = $discountMoney ? clone $money : null;
+                if ($discountMoney) {
+                    $money = $discountMoney;
+                }
 
                 //Если указано минимальное количество продажи
                 if ($this->is_measure_ratio_min == 1) {
                     if ($element->shopProduct->measure_ratio_min) {
                         $money->multiply($element->shopProduct->measure_ratio_min);
                         if ($baseMoney) { $baseMoney->multiply($element->shopProduct->measure_ratio_min); }
+                        if ($fullMoney) { $fullMoney->multiply($element->shopProduct->measure_ratio_min); }
                     }
                 }
-                
+
 
                 $xoffer->appendChild($this->xmlElement('price', $money->getValue()));
                 $xoffer->appendChild($this->xmlElement('currencyId', $money->getCurrency()->getCurrencyCode()));
 
-                if ($baseMoney && (float)$baseMoney->amount > (float)$money->amount) {
-                    $xoffer->appendChild($this->xmlElement('oldprice', $baseMoney->getValue()));
+                $oldMoney = $baseMoney;
+                if ($fullMoney && (!$oldMoney || (float)$fullMoney->amount > (float)$oldMoney->amount)) {
+                    $oldMoney = $fullMoney;
+                }
+                if ($oldMoney && (float)$oldMoney->amount > (float)$money->amount) {
+                    $xoffer->appendChild($this->xmlElement('oldprice', $oldMoney->getValue()));
                 }
             }
         }
@@ -1268,6 +1285,114 @@ class ExportShopYandexMarketHandler extends ExportHandler
 
         $xoffers->appendChild($xoffer);
         return $xoffer;
+    }
+
+    /** @var array|null Товарные скидки, доступные гостю сайта (по приоритету). */
+    protected $_guestDiscounts;
+
+    /**
+     * Товарные скидки, которые витрина применяет к любому посетителю (роль гостя),
+     * в том же порядке, что ProductPriceHelper. Купоны и личные скидки сюда не входят.
+     * @return ShopDiscount[]
+     */
+    protected function getGuestDiscounts()
+    {
+        if ($this->_guestDiscounts === null) {
+            $discounts = ShopDiscount::find()
+                ->joinWith('cmsAuthItems as cmsAuthItems')
+                ->andWhere(['cmsAuthItems.name' => CmsManager::ROLE_GUEST])
+                ->cmsSite()
+                ->active()
+                ->andWhere(['assignment_type' => ShopDiscount::ASSIGNMENT_TYPE_PRODUCT])
+                ->all();
+            ArrayHelper::multisort($discounts, 'priority');
+            $this->_guestDiscounts = $discounts;
+        }
+        return $this->_guestDiscounts;
+    }
+
+    /**
+     * Цена за единицу после скидок, которые видит любой посетитель на странице товара
+     * (повторяет порядок ProductPriceHelper: проценты от исходной цены, фиксированные суммы,
+     * ограничение max_discount, остановка на is_last).
+     * @return \skeeks\cms\money\Money|null null — скидок нет
+     */
+    protected function applyGuestDiscounts(ShopCmsContentElement $element, $price)
+    {
+        $discounts = $this->getGuestDiscounts();
+        if (!$discounts || !$price || !$price->money) {
+            return null;
+        }
+        $money = clone $price->money;
+        $applied = false;
+        foreach ($discounts as $discount) {
+            if (!$discount->isTrue($element, $price)) {
+                continue;
+            }
+            if ($discount->value_type == ShopDiscount::VALUE_TYPE_P) {
+                $discountMoney = clone $money;
+                $discountMoney->multiply($discount->value / 100);
+                if ($discount->max_discount > 0 && $discount->max_discount < $discountMoney->amount) {
+                    $discountMoney->amount = $discount->max_discount;
+                }
+                $money->sub($discountMoney);
+            } elseif ($discount->value_type == ShopDiscount::VALUE_TYPE_F) {
+                $discountMoney = clone $money;
+                $discountMoney->amount = $discount->value;
+                $money->sub($discountMoney);
+            } else {
+                continue;
+            }
+            $applied = true;
+            if ($discount->is_last) {
+                break;
+            }
+        }
+        if (!$applied) {
+            return null;
+        }
+        $money->amount = (float)$money->amount;
+        return $money;
+    }
+
+    /** @var array|null id складов сайта (свои и поставщиков), как на странице товара. */
+    protected $_siteStoreIds;
+
+    protected function getSiteStoreIds()
+    {
+        if ($this->_siteStoreIds === null) {
+            $this->_siteStoreIds = ArrayHelper::getColumn((array)\Yii::$app->shop->allStores, 'id');
+        }
+        return $this->_siteStoreIds;
+    }
+
+    protected function isShowProductNoQuantity()
+    {
+        $shopSite = \Yii::$app->skeeks->site->shopSite;
+        return $shopSite && $shopSite->is_show_product_no_quantity;
+    }
+
+    /**
+     * Можно ли купить товар на сайте — то же условие, что выбирает между «В корзину»
+     * и «Уведомить о поступлении» на странице товара: есть остаток на складах сайта,
+     * у сайта нет складов или включён показ товаров без наличия.
+     */
+    protected function isAvailableOnSite(ShopCmsContentElement $element)
+    {
+        if ($this->isShowProductNoQuantity()) {
+            return true;
+        }
+        $storeIds = $this->getSiteStoreIds();
+        if (!$storeIds) {
+            return true;
+        }
+        $quantity = 0;
+        foreach ((array)$element->shopProduct->shopStoreProducts as $storeProduct) {
+            if (in_array($storeProduct->shop_store_id, $storeIds)) {
+                $quantity += (float)$storeProduct->quantity;
+            }
+        }
+        return $quantity > 0;
     }
 
     /**

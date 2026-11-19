@@ -27,6 +27,10 @@ class TestHandler extends skeeks\cms\exportShopYandexMarket\ExportShopYandexMark
     public function offer($offers, $element) { return $this->_initOffer($offers, $element); }
     public function skip($element) { return $this->getOfferSkipReason($element); }
     public function measures($measures) { $this->_measuresByCode = $measures; }
+    public $testDiscounts = [], $testStores = [], $testNoQuantity = false;
+    protected function getGuestDiscounts() { return $this->testDiscounts; }
+    protected function getSiteStoreIds() { return $this->testStores; }
+    protected function isShowProductNoQuantity() { return $this->testNoQuantity; }
 }
 class TestElement extends skeeks\cms\shop\models\ShopCmsContentElement {
     public $fixture = [];
@@ -187,6 +191,80 @@ check($descriptionOf() === 'Своё описание', 'Own description kept');
 unset($element->fixture['productDescriptionShort']);
 $product->measure_code = '055';
 $handler->is_description = 0;
+
+// Наличие как на странице товара
+$handler->is_params = 0;
+$availableOf = function () use ($handler, $offers, $element) { return $handler->offer($offers, $element)->getAttribute('available'); };
+check($availableOf() === 'true', 'No site stores: available');
+$handler->testStores = [1, 2];
+$product->shopStoreProducts = [(object)['shop_store_id'=>1, 'quantity'=>0], (object)['shop_store_id'=>3, 'quantity'=>50]];
+check($availableOf() === 'false', 'Stock only outside site stores: not available');
+$product->shopStoreProducts[] = (object)['shop_store_id'=>2, 'quantity'=>1.44];
+check($availableOf() === 'true', 'Stock on a site store: available');
+$product->shopStoreProducts = [];
+$handler->testNoQuantity = true;
+check($availableOf() === 'true', 'Products without stock shown as buyable: available');
+$handler->testNoQuantity = false;
+$handler->testStores = [];
+
+// Цена со скидками для гостя, как на странице товара
+$discount = function ($type, $value, $isLast = true, $applies = true, $max = 0) {
+    return new class($type, $value, $isLast, $applies, $max) {
+        public $value_type, $value, $is_last, $max_discount, $applies;
+        public function __construct($t, $v, $l, $a, $m) { $this->value_type = $t; $this->value = $v; $this->is_last = $l; $this->applies = $a; $this->max_discount = $m; }
+        public function isTrue($element, $price) { return $this->applies; }
+    };
+};
+$priceOf = function () use ($handler, $offers, $element) {
+    $offer = $handler->offer($offers, $element);
+    $old = $offer->getElementsByTagName('oldprice')->item(0);
+    return [(float)$offer->getElementsByTagName('price')->item(0)->textContent, $old ? (float)$old->textContent : null];
+};
+$realPrice = function ($amount) {
+    $m = new class { public $amount;
+        public function multiply($n) { $this->amount = $this->amount * $n; return $this; }
+        public function sub($o) { $this->amount = $this->amount - $o->amount; return $this; }
+        public function getValue() { return round($this->amount, 4); }
+        public function getCurrency() { return new class { public function getCurrencyCode() { return 'RUB'; } }; }
+    };
+    $m->amount = $amount;
+    return (object)['money'=>$m];
+};
+$handler->is_measure_ratio_min = 0;
+$product->baseProductPrice = null;
+$product->minProductPrice = $realPrice(2082);
+check($priceOf() === [2082.0, null], 'No discounts: price unchanged');
+$handler->testDiscounts = [$discount('P', 15)];
+$product->minProductPrice = $realPrice(2082);
+check($priceOf() === [1769.7, 2082.0], 'Guest discount: discounted price and oldprice');
+$handler->testDiscounts = [$discount('P', 15, true, false)];
+$product->minProductPrice = $realPrice(2082);
+check($priceOf() === [2082.0, null], 'Discount not matching product ignored');
+$handler->testDiscounts = [$discount('P', 10, false), $discount('F', 100)];
+$product->minProductPrice = $realPrice(1000);
+check($priceOf() === [800.0, 1000.0], 'Percent then fixed discount, as on storefront');
+$handler->testDiscounts = [$discount('P', 15), $discount('P', 50)];
+$product->minProductPrice = $realPrice(1000);
+check($priceOf() === [850.0, 1000.0], 'Last discount stops the chain');
+$handler->testDiscounts = [$discount('P', 50, true, true, 100)];
+$product->minProductPrice = $realPrice(1000);
+check($priceOf() === [900.0, 1000.0], 'max_discount caps the discount');
+$handler->is_measure_ratio_min = 1;
+$product->measure_ratio_min = 1.44;
+$handler->testDiscounts = [$discount('P', 15)];
+$product->minProductPrice = $realPrice(2082);
+$p = $priceOf();
+check(abs($p[0] - 2548.368) < 0.01 && abs($p[1] - 2998.08) < 0.01, 'Discount combined with minimum quantity price');
+$product->baseProductPrice = $realPrice(3500);
+$product->minProductPrice = $realPrice(2082);
+$p = $priceOf();
+check(abs($p[1] - 5040) < 0.01, 'Higher base price stays oldprice');
+$handler->testDiscounts = [];
+$product->measure_ratio_min = null;
+$product->baseProductPrice = null;
+$handler->is_measure_ratio_min = 0;
+$product->minProductPrice = (object)['money'=>$money];
+
 $reporter = new class {
     public $success=0, $skipped=0, $errors=0, $warnings=0, $processed=0;
     public function countSkipped() { $this->skipped++; }
