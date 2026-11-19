@@ -26,6 +26,7 @@ class TestHandler extends skeeks\cms\exportShopYandexMarket\ExportShopYandexMark
     public function filter($query) { $this->applyQuantityFilters($query); }
     public function offer($offers, $element) { return $this->_initOffer($offers, $element); }
     public function skip($element) { return $this->getOfferSkipReason($element); }
+    public function measures($measures) { $this->_measuresByCode = $measures; }
 }
 class TestElement extends skeeks\cms\shop\models\ShopCmsContentElement {
     public $fixture = [];
@@ -76,7 +77,7 @@ $xml->appendChild($handler->node('A & Co. <tiles> "quote" м²'));
 $copy = new DOMDocument();
 check($copy->loadXML($xml->saveXML()), 'XML remains parseable');
 check($copy->documentElement->textContent === 'A & Co. <tiles> "quote" м²', 'Text round trip escapes exactly once');
-$money = new class { public $amount = 100; public function getValue() { return 100; } public function getCurrency() { return new class { public function getCurrencyCode() { return 'RUB'; } }; } };
+$money = new class { public $amount = 100; public function multiply($ratio) {} public function getValue() { return 100; } public function getCurrency() { return new class { public function getCurrencyCode() { return 'RUB'; } }; } };
 $product = (object)['minProductPrice'=>(object)['money'=>$money], 'baseProductPrice'=>null, 'measure_ratio_min'=>null, 'brand_id'=>1, 'brand'=>(object)['name'=>'A & Co.'], 'brand_sku'=>'SKU & PO', 'country_alpha2'=>null, 'expiration_time'=>null, 'warranty_time'=>null];
 $element = new TestElement();
 $element->fixture = ['id'=>42, 'shopProduct'=>$product, 'mainProductImage'=>(object)['absoluteSrc'=>'https://example.com/img?a=1&b=2'], 'productName'=>'Tile & PO', 'absoluteUrl'=>'https://example.com/item?a=1&b=2'];
@@ -110,6 +111,73 @@ $handler->is_params = 1;
 $element->fixture['relatedPropertiesModel'] = new class { public function initAllProperties() { throw new RuntimeException('late failure'); } };
 try { $handler->offer($offers, $element); throw new RuntimeException('Expected offer failure'); } catch (RuntimeException $e) { check($e->getMessage() === 'late failure', 'Late failure surfaced'); }
 check($offers->childNodes->length === 1, 'Failed offer leaves no partial XML');
+$product->measureMatches = [];
+$product->measure_code = '055';
+$product->country_alpha2 = 'RU';
+$product->country = (object)['name'=>'Россия'];
+$element->fixture['relatedPropertiesModel'] = new class { public function initAllProperties() {} public function toArray() { return []; } };
+$countryOffer = $handler->offer($offers, $element);
+check($countryOffer->getElementsByTagName('country_of_origin')->item(0)->textContent === 'Россия', 'country_of_origin kept');
+$countryParams = [];
+foreach ($countryOffer->getElementsByTagName('param') as $p) { if ($p->getAttribute('name') === 'Страна') { $countryParams[] = $p->textContent; } }
+check($countryParams === ['Россия'], 'Country duplicated as param when params are exported');
+$element->fixture['relatedPropertiesModel'] = new class {
+    public function initAllProperties() {}
+    public function toArray() { return ['country'=>'it']; }
+    public function getRelatedProperty($code) { return (object)['property_type'=>'S', 'name'=>'Страна']; }
+    public function getAttributeAsText($code) { return 'Италия'; }
+};
+$countryOffer = $handler->offer($offers, $element);
+$countryParams = [];
+foreach ($countryOffer->getElementsByTagName('param') as $p) { if ($p->getAttribute('name') === 'Страна') { $countryParams[] = $p->textContent; } }
+check($countryParams === ['Италия'], 'Existing country property is not duplicated');
+$handler->measures([
+    '055'=>(object)['code'=>'055','name'=>'Квадратный метр','symbol'=>'м2'],
+    '778'=>(object)['code'=>'778','name'=>'Упаковка','symbol'=>'упак'],
+    '796'=>(object)['code'=>'796','name'=>'Штука','symbol'=>'шт'],
+    '900'=>(object)['code'=>'900','name'=>'Палета','symbol'=>'пал'],
+    '018'=>(object)['code'=>'018','name'=>'Погонный метр','symbol'=>'пог. м'],
+]);
+$product->measureMatches = ['778'=>1.44, '796'=>0.48, '900'=>57.6, '018'=>2, 'missing'=>3];
+$matchOffer = $handler->offer($offers, $element);
+$matchParams = [];
+foreach ($matchOffer->getElementsByTagName('param') as $p) { $matchParams[$p->getAttribute('name')] = [$p->textContent, $p->getAttribute('unit')]; }
+check(($matchParams['Площадь в упаковке'] ?? null) === ['1.44', 'кв. м'], 'Package area exported');
+check(($matchParams['Площадь одной штуки'] ?? null) === ['0.48', 'кв. м'], 'Piece area exported');
+check(($matchParams['Площадь в палете'] ?? null) === ['57.6', 'кв. м'], 'Pallet area exported');
+check(($matchParams['Площадь в 1 пог. м'] ?? null) === ['2', 'кв. м'], 'Multi-word unit falls back to symbol');
+check(count($matchParams) === 5, 'Unknown measure skipped');
+$product->measure_code = '796';
+$matchOffer = $handler->offer($offers, $element);
+$matchParams = [];
+foreach ($matchOffer->getElementsByTagName('param') as $p) { $matchParams[$p->getAttribute('name')] = [$p->textContent, $p->getAttribute('unit')]; }
+check(($matchParams['Количество в упаковке'] ?? null) === ['1.44', 'шт'], 'Piece-based package uses quantity');
+check(!isset($matchParams['Количество одной штуки']), 'Match equal to base measure skipped');
+$product->measureMatches = [];
+$product->measure_code = '055';
+$handler->is_params = 0;
+$countryOffer = $handler->offer($offers, $element);
+check($countryOffer->getElementsByTagName('param')->length === 0, 'No country param when params are disabled');
+$handler->is_description = 1;
+$descriptionOf = function () use ($handler, $offers, $element) {
+    $node = $handler->offer($offers, $element)->getElementsByTagName('description')->item(0);
+    return $node ? $node->textContent : null;
+};
+$handler->is_measure_ratio_min = 0;
+$product->measure_ratio_min = 1.44;
+check($descriptionOf() === 'Цена указана за 1 м2', 'Missing description states price unit instead of name');
+$handler->is_measure_ratio_min = 1;
+check($descriptionOf() === 'Цена указана за 1,44 м2', 'Price unit follows exported minimum quantity');
+$product->measure_ratio_min = null;
+$product->measure_code = '796';
+check($descriptionOf() === 'Цена указана за 1 шт', 'Piece price unit');
+$product->measure_code = 'missing';
+check($descriptionOf() === null, 'Unknown measure gives no description');
+$element->fixture['productDescriptionShort'] = 'Своё описание';
+check($descriptionOf() === 'Своё описание', 'Own description kept');
+unset($element->fixture['productDescriptionShort']);
+$product->measure_code = '055';
+$handler->is_description = 0;
 $reporter = new class {
     public $success=0, $skipped=0, $errors=0, $warnings=0, $processed=0;
     public function countSkipped() { $this->skipped++; }

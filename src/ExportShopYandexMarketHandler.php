@@ -1143,8 +1143,9 @@ class ExportShopYandexMarketHandler extends ExportHandler
                 $xoffer->appendChild($this->xmlElement('description'))->appendChild(new \DOMCdataSection($description));
             } elseif ($element->productDescriptionShort) {
                 $xoffer->appendChild($this->xmlElement('description'))->appendChild(new \DOMCdataSection($element->productDescriptionShort));
-            } else {
-                $xoffer->appendChild($this->xmlElement('description'))->appendChild(new \DOMCdataSection($element->productName));
+            } elseif ($priceUnitText = $this->priceUnitDescription($element)) {
+                //Своего описания нет: вместо повтора названия пишем, за какое количество указана цена
+                $xoffer->appendChild($this->xmlElement('description'))->appendChild(new \DOMCdataSection($priceUnitText));
             }
         }
 
@@ -1259,11 +1260,147 @@ class ExportShopYandexMarketHandler extends ExportHandler
                 }
 
             }
+
+            $this->appendCountryParam($xoffer, $element);
+            $this->appendMeasureMatchParams($xoffer, $element);
         }
 
 
         $xoffers->appendChild($xoffer);
         return $xoffer;
+    }
+
+    /**
+     * «Цена указана за 1 м2» — за то количество, за которое в фид попала цена
+     * (с учётом настройки «Учитывать минимальное количество продажи»).
+     * @return string|null null, если единица товара неизвестна
+     */
+    protected function priceUnitDescription(ShopCmsContentElement $element)
+    {
+        $shopProduct = $element->shopProduct;
+        if (!$shopProduct || !$shopProduct->measure_code) {
+            return null;
+        }
+        $measure = $this->getMeasuresByCode()[(string)$shopProduct->measure_code] ?? null;
+        if (!$measure || !$measure->symbol) {
+            return null;
+        }
+        $quantity = 1;
+        if ($this->is_measure_ratio_min == 1 && (float)$shopProduct->measure_ratio_min > 0) {
+            $quantity = (float)$shopProduct->measure_ratio_min;
+        }
+        $quantity = str_replace('.', ',', rtrim(rtrim(number_format($quantity, 4, '.', ''), '0'), '.'));
+        return 'Цена указана за '.$quantity.' '.$measure->symbol;
+    }
+
+    /** @var array|null Справочник единиц измерения по коду, загружается один раз на выгрузку. */
+    protected $_measuresByCode;
+
+    /**
+     * @return array code => object with name and symbol
+     */
+    protected function getMeasuresByCode()
+    {
+        if ($this->_measuresByCode === null) {
+            $this->_measuresByCode = [];
+            foreach (CmsMeasure::find()->select(['code', 'name', 'symbol'])->asArray()->all() as $row) {
+                $this->_measuresByCode[(string)$row['code']] = (object)$row;
+            }
+        }
+        return $this->_measuresByCode;
+    }
+
+    protected function hasParam(\DOMElement $xoffer, $name)
+    {
+        $name = mb_strtolower(trim($name));
+        foreach ($xoffer->getElementsByTagName('param') as $xParam) {
+            if (mb_strtolower(trim($xParam->getAttribute('name'))) == $name) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Соответствия единиц товара («Упаковка» = 1,44 м², «Палета» = 57,6 м², «Штука» = 0,48 м²)
+     * выгружаются характеристиками: <param name="Площадь в упаковке" unit="кв. м">1.44</param>.
+     */
+    protected function appendMeasureMatchParams(\DOMElement $xoffer, ShopCmsContentElement $element)
+    {
+        $shopProduct = $element->shopProduct;
+        $matches = $shopProduct ? (array)$shopProduct->measureMatches : [];
+        if (!$matches) {
+            return;
+        }
+        $measures = $this->getMeasuresByCode();
+        $base = $measures[(string)$shopProduct->measure_code] ?? null;
+        if (!$base) {
+            return;
+        }
+        foreach ($matches as $code => $count) {
+            $count = (float)$count;
+            $measure = $measures[(string)$code] ?? null;
+            if ($count <= 0 || !$measure || (string)$code === (string)$shopProduct->measure_code) {
+                continue;
+            }
+            $name = $this->measureMatchParamName($base, $measure);
+            if ($this->hasParam($xoffer, $name)) {
+                continue;
+            }
+            $xParam = $this->xmlElement('param', rtrim(rtrim(number_format($count, 4, '.', ''), '0'), '.'));
+            $xoffer->appendChild($xParam);
+            $xParam->setAttribute('name', $name);
+            $xParam->setAttribute('unit', $this->measureParamUnit($base));
+        }
+    }
+
+    /** «Площадь в упаковке», «Количество в палете», «Площадь одной штуки». */
+    protected function measureMatchParamName($base, $measure)
+    {
+        $quantities = [
+            '055' => 'Площадь', '006' => 'Длина', '018' => 'Длина', '113' => 'Объём', '112' => 'Объём',
+            '163' => 'Вес', '166' => 'Вес',
+        ];
+        $quantity = $quantities[(string)$base->code] ?? 'Количество';
+        if ((string)$measure->code === '796') {
+            return $quantity.' одной штуки';
+        }
+        $word = mb_strtolower(trim((string)$measure->name));
+        if ($word === '' || preg_match('/[^а-яё]/u', $word)) {
+            return $quantity.' в 1 '.($measure->symbol ?: $measure->name);
+        }
+        if (preg_match('/[ая]$/u', $word)) {
+            $word = mb_substr($word, 0, -1).'е';
+        } elseif (preg_match('/[бвгджзклмнпрстфхцчшщ]$/u', $word)) {
+            $word .= 'е';
+        } else {
+            return $quantity.' в 1 '.($measure->symbol ?: $measure->name);
+        }
+        return $quantity.' в '.$word;
+    }
+
+    protected function measureParamUnit($base)
+    {
+        $units = ['055' => 'кв. м', '113' => 'куб. м'];
+        return $units[(string)$base->code] ?? (string)$base->symbol;
+    }
+
+    /**
+     * Яндекс Товары и Директ читают характеристики из <param>, поэтому страну
+     * производства дублируем рядом с <country_of_origin>, если её ещё нет среди характеристик.
+     */
+    protected function appendCountryParam(\DOMElement $xoffer, ShopCmsContentElement $element)
+    {
+        $shopProduct = $element->shopProduct;
+        if (!$shopProduct || !$shopProduct->country_alpha2 || !$shopProduct->country || !$shopProduct->country->name) {
+            return;
+        }
+        if ($this->hasParam($xoffer, 'Страна')) {
+            return;
+        }
+        $xParam = $this->xmlElement('param', $shopProduct->country->name);
+        $xoffer->appendChild($xParam);
+        $xParam->setAttribute('name', 'Страна');
     }
 
     /** DOMElement parses entity references in its value, so escape raw text once. */
