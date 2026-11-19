@@ -1343,7 +1343,16 @@ class ExportShopYandexMarketHandler extends ExportHandler
             if ($count <= 0 || !$measure || (string)$code === (string)$shopProduct->measure_code) {
                 continue;
             }
+            //Упаковка — это тара или штуки (упак, палета, коробка, шт). Физические единицы
+            //в соответствиях — ошибка заполнения («Площадь в миллиметре»), их не выгружаем.
+            if (in_array((string)$code, ['003', '004', '006', '018', '055', '113', '112', '163', '166'], true)) {
+                continue;
+            }
             $name = $this->measureMatchParamName($base, $measure);
+            //«Количество одной штуки» у комплектов ничего не сообщает покупателю
+            if ($name === 'Количество одной штуки') {
+                continue;
+            }
             if ($this->hasParam($xoffer, $name)) {
                 continue;
             }

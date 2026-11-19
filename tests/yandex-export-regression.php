@@ -136,16 +136,19 @@ $handler->measures([
     '778'=>(object)['code'=>'778','name'=>'Упаковка','symbol'=>'упак'],
     '796'=>(object)['code'=>'796','name'=>'Штука','symbol'=>'шт'],
     '900'=>(object)['code'=>'900','name'=>'Палета','symbol'=>'пал'],
-    '018'=>(object)['code'=>'018','name'=>'Погонный метр','symbol'=>'пог. м'],
+    '901'=>(object)['code'=>'901','name'=>'Евро палета','symbol'=>'европал'],
+    '003'=>(object)['code'=>'003','name'=>'Миллиметр','symbol'=>'мм'],
+    '839'=>(object)['code'=>'839','name'=>'Комплект','symbol'=>'компл'],
 ]);
-$product->measureMatches = ['778'=>1.44, '796'=>0.48, '900'=>57.6, '018'=>2, 'missing'=>3];
+$product->measureMatches = ['778'=>1.44, '796'=>0.48, '900'=>57.6, '901'=>2, '003'=>1.44, 'missing'=>3];
 $matchOffer = $handler->offer($offers, $element);
 $matchParams = [];
 foreach ($matchOffer->getElementsByTagName('param') as $p) { $matchParams[$p->getAttribute('name')] = [$p->textContent, $p->getAttribute('unit')]; }
 check(($matchParams['Площадь в упаковке'] ?? null) === ['1.44', 'кв. м'], 'Package area exported');
 check(($matchParams['Площадь одной штуки'] ?? null) === ['0.48', 'кв. м'], 'Piece area exported');
 check(($matchParams['Площадь в палете'] ?? null) === ['57.6', 'кв. м'], 'Pallet area exported');
-check(($matchParams['Площадь в 1 пог. м'] ?? null) === ['2', 'кв. м'], 'Multi-word unit falls back to symbol');
+check(($matchParams['Площадь в 1 европал'] ?? null) === ['2', 'кв. м'], 'Multi-word unit falls back to symbol');
+check(!isset($matchParams['Площадь в миллиметре']), 'Physical unit match skipped');
 check(count($matchParams) === 5, 'Unknown measure skipped');
 $product->measure_code = '796';
 $matchOffer = $handler->offer($offers, $element);
@@ -153,6 +156,12 @@ $matchParams = [];
 foreach ($matchOffer->getElementsByTagName('param') as $p) { $matchParams[$p->getAttribute('name')] = [$p->textContent, $p->getAttribute('unit')]; }
 check(($matchParams['Количество в упаковке'] ?? null) === ['1.44', 'шт'], 'Piece-based package uses quantity');
 check(!isset($matchParams['Количество одной штуки']), 'Match equal to base measure skipped');
+$product->measure_code = '839';
+$matchOffer = $handler->offer($offers, $element);
+$matchParams = [];
+foreach ($matchOffer->getElementsByTagName('param') as $p) { $matchParams[$p->getAttribute('name')] = [$p->textContent, $p->getAttribute('unit')]; }
+check(!isset($matchParams['Количество одной штуки']), 'Set: piece count is not exported');
+check(($matchParams['Количество в упаковке'] ?? null) === ['1.44', 'компл'], 'Set: package count exported');
 $product->measureMatches = [];
 $product->measure_code = '055';
 $handler->is_params = 0;
